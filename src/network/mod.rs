@@ -1,9 +1,13 @@
-use crate::localnet::LocalNetwork;
+mod flit;
+mod localnet;
+mod packet;
+
 use crate::serial::Serial;
-use crate::packet::Coordinate;
-use crate::packet::Id;
 use anyhow::Result;
 
+use localnet::LocalNetwork;
+use packet::Coordinate;
+use packet::Id;
 
 pub struct Network<'d> {
     node_id: Option<Id>,
@@ -24,22 +28,22 @@ impl<'d> Network<'d> {
         if localnet.is_root() {
             Network {
                 node_id: Some(localnet.root_node_id()),
-                neighbor_localnet_id_and_coordinate: Vec::new() ,
+                neighbor_localnet_id_and_coordinate: Vec::new(),
                 coordinate: Some(localnet.root_coordinate()),
                 localnet,
                 is_confirmed: true,
                 serial,
-                 
+
                 parent: None,
                 children: Vec::new(),
             }
-        }else {
+        } else {
             Network {
                 node_id: None,
-                neighbor_localnet_id_and_coordinate: Vec::new() ,
+                neighbor_localnet_id_and_coordinate: Vec::new(),
                 localnet,
                 coordinate: None,
-                is_confirmed:false,
+                is_confirmed: false,
                 serial,
 
                 parent: None,
@@ -54,9 +58,10 @@ impl<'d> Network<'d> {
     pub fn try_connect(&mut self) -> Result<Option<(Id, Coordinate)>> {
         if !self.is_connected() {
             Ok(None)
-        }else {
+        } else {
             let neightbor_id_coordinate = self.get_neighbor_id_coordinate()?;
-            self.neighbor_localnet_id_and_coordinate.push(neightbor_id_coordinate);
+            self.neighbor_localnet_id_and_coordinate
+                .push(neightbor_id_coordinate);
             Ok(Some(neightbor_id_coordinate))
         }
     }
@@ -66,7 +71,9 @@ impl<'d> Network<'d> {
 
     pub fn calcuate_coordinate(&self) -> Result<Coordinate> {
         if !self.can_calculate_coordinate() {
-            return Err(anyhow::anyhow!("Cannot calculate coordinate less than 2 neighbors"));
+            return Err(anyhow::anyhow!(
+                "Cannot calculate coordinate less than 2 neighbors"
+            ));
         }
         for (id, coordinate) in &self.neighbor_localnet_id_and_coordinate {
             unimplemented!();
@@ -78,7 +85,7 @@ impl<'d> Network<'d> {
         self.is_confirmed = true;
         self.coordinate = Some(coordinate);
     }
-    
+
     pub fn get_id_from_root(&self) -> Result<Id> {
         // after confirned
         unimplemented!();

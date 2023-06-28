@@ -1,8 +1,6 @@
 use anyhow::Result;
 use std::time::Duration;
-use std_display::efuse::{
-    Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT, ROOT,
-};
+use std_display::efuse::{Efuse, ROOT};
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();

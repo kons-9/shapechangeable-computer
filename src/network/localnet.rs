@@ -1,5 +1,7 @@
+use crate::efuse::{
+    Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT,
+};
 use crate::packet::Id;
-use crate::efuse::{Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT};
 use rand::Rng;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -13,17 +15,17 @@ pub enum LocalNetworkLocation {
 #[derive(Debug)]
 pub struct LocalNetwork {
     /// relative location in the same localnet
-    location: LocalNetworkLocation, 
+    location: LocalNetworkLocation,
     /// share in the same localnet
-    localnet_id: Id, 
+    localnet_id: Id,
     /// it is about global network. so we read efuse value.
-    is_root: bool, 
+    is_root: bool,
 }
 
 impl LocalNetwork {
     /// LocalNetwork is a 2x2 network.
     /// Basicly, localnetwork information is stored in efuse.
-    /// master of localnet is upleft. 
+    /// master of localnet is upleft.
     /// others are slaves.
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
@@ -32,32 +34,32 @@ impl LocalNetwork {
 
         // id is random.
         // todo: id must be different from neighbor's localnet id.
-        // todo: A node that is appended later will use voltage that is provided by other nodes connected through magnetic field. 
+        // todo: A node that is appended later will use voltage that is provided by other nodes connected through magnetic field.
         // todo: then it will get id from other nodes but it will accidentally get same id with other localnet nodes.
         // todo: In this perspective, we'd better think not using communication when we get id.
         // todo: maybe we will also use efuse to get id. I am still finding the best way to get id.
         let localnet_id;
         if location == LocalNetworkLocation::UpLeft {
-
-            localnet_id = rand::thread_rng().gen_range(1..10000); 
+            localnet_id = rand::thread_rng().gen_range(1..10000);
             // send localnet_id to slaves
             Self::send_localnet_id(localnet_id);
-            
-
         } else {
             // receive localnet_id from master
             localnet_id = Self::receive_localnet_id();
-
         }
 
-        LocalNetwork { location, localnet_id , is_root}
+        LocalNetwork {
+            location,
+            localnet_id,
+            is_root,
+        }
     }
 
     fn send_localnet_id(localnet_id: Id) {
         // wait for all slaves until they get localnet_id
         unimplemented!();
     }
-    fn receive_localnet_id() -> Id{
+    fn receive_localnet_id() -> Id {
         // receive localnet_id from master
         unimplemented!();
     }
@@ -97,7 +99,6 @@ impl LocalNetwork {
     pub fn is_root(&self) -> bool {
         self.is_root
     }
-
 }
 
 // test
@@ -109,9 +110,7 @@ mod tests {
         // root and upleft
         let mut block3 = [0; 8];
         block3[7] = 0x00000001;
-        let efuse = Efuse {
-            block3,
-        };
+        let efuse = Efuse { block3 };
 
         let localnet = LocalNetwork::new();
         println!("{:?}", localnet);
