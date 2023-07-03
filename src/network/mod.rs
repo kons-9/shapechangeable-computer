@@ -1,13 +1,14 @@
 mod flit;
+mod header;
 mod localnet;
 mod packet;
 
 use crate::serial::Serial;
 use anyhow::Result;
 
+pub use flit::Coordinate;
+pub use flit::Id;
 use localnet::LocalNetwork;
-use packet::Coordinate;
-use packet::Id;
 
 pub struct Network<'d> {
     node_id: Option<Id>,
