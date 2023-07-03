@@ -1,19 +1,17 @@
+mod display;
+mod efuse;
 mod network;
 mod sd;
-mod display;
-mod localnet;
-mod efuse;
 mod serial;
-mod packet;
 
 use anyhow::Result;
+use esp_idf_hal::gpio;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::uart::{UartConfig, UartDriver};
-use esp_idf_hal::gpio;
 
-use std::{time::Duration, thread::sleep};
-use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
-                      
+use esp_idf_sys as _;
+use std::{thread::sleep, time::Duration}; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
+
 use network::Network;
 
 pub fn run() -> Result<()> {
@@ -61,9 +59,8 @@ fn slave_setup(network: &mut Network) -> Result<()> {
     }
     let coordinate = network.calcuate_coordinate()?;
     network.set_coordinate(coordinate);
-    
+
     // then we can connect with root
     network.get_id_from_root()?;
     Ok(())
 }
-

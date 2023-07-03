@@ -38,10 +38,11 @@ shtcx = "0.11.0"
 toml-cfg = "0.1.3"
 rand = "0.8.5"
 esp32c3 = "0.15.0"
+num_enum = "0.6.1"
 
 
 [build-dependencies]
 embuild = "0.31.2"
 anyhow = "1.0.71"
 toml-cfg = "0.1.3"
-num-enum = "0.6.1"
+num_enum = "0.6.1"
