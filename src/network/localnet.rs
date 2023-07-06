@@ -1,7 +1,9 @@
+use super::flit::{Flit, FlitLoader, FlitMaker, FlitType, Id};
+use super::packet::Packet;
+
 use crate::efuse::{
     Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT,
 };
-use crate::packet::Id;
 use rand::Rng;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -20,6 +22,10 @@ pub struct LocalNetwork {
     localnet_id: Id,
     /// it is about global network. so we read efuse value.
     is_root: bool,
+    /// neighbor ids
+    others_ids: [Id; 3],
+    /// mac address
+    mac_address: Id,
 }
 
 impl LocalNetwork {
@@ -29,46 +35,45 @@ impl LocalNetwork {
     /// others are slaves.
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
-        let location = efuse.efuse_to_localnet();
+        let location: LocalNetworkLocation = efuse.efuse_to_localnet();
+        let localnet_id = efuse.get_localnet_id() as Id;
+        let mac_address = efuse.get_mac_address() as Id;
         let is_root = efuse.is_root();
 
-        // id is random.
-        // todo: id must be different from neighbor's localnet id.
-        // todo: A node that is appended later will use voltage that is provided by other nodes connected through magnetic field.
-        // todo: then it will get id from other nodes but it will accidentally get same id with other localnet nodes.
-        // todo: In this perspective, we'd better think not using communication when we get id.
-        // todo: maybe we will also use efuse to get id. I am still finding the best way to get id.
-        let localnet_id;
-        if location == LocalNetworkLocation::UpLeft {
-            localnet_id = rand::thread_rng().gen_range(1..10000);
-            // send localnet_id to slaves
-            Self::send_localnet_id(localnet_id);
-        } else {
-            // receive localnet_id from master
-            localnet_id = Self::receive_localnet_id();
-        }
+        // localnet nodes' form is like this:
+        // 0x00000000 [ localnet_id ] [ location ] [ is_root ]
+        let others_ids = {
+            let raw_localnet = efuse.get_raw_localnet_id();
+            let raw_location = efuse.get_raw_localnet_location();
+            let raw_is_root = efuse.get_raw_root();
+
+            let mut ids = [0; 3];
+            let mut index = 0;
+            for raw_other_location in (0..8).step_by(2) {
+                if raw_location == raw_other_location {
+                    continue;
+                }
+                let id = raw_localnet | raw_other_location | raw_is_root;
+                ids[index] = id as Id;
+                index += 1;
+            }
+            ids
+        };
 
         LocalNetwork {
             location,
             localnet_id,
             is_root,
+            others_ids,
+            mac_address,
         }
-    }
-
-    fn send_localnet_id(localnet_id: Id) {
-        // wait for all slaves until they get localnet_id
-        unimplemented!();
-    }
-    fn receive_localnet_id() -> Id {
-        // receive localnet_id from master
-        unimplemented!();
     }
 
     // ------------------------------
     // only for root
     // ------------------------------
 
-    pub fn root_coordinate(&self) -> (u32, u32) {
+    pub fn root_coordinate(&self) -> (Id, Id) {
         match &self.location {
             LocalNetworkLocation::UpLeft => (0, 1),
             LocalNetworkLocation::UpRight => (1, 1),
@@ -77,27 +82,24 @@ impl LocalNetwork {
         }
     }
 
-    pub fn root_node_id(&self) -> Id {
-        match &self.location {
-            LocalNetworkLocation::UpLeft => 0,
-            LocalNetworkLocation::UpRight => 1,
-            LocalNetworkLocation::DownLeft => 2,
-            LocalNetworkLocation::DownRight => 3,
-        }
-    }
-
     // ------------------------------
     // getter
     // ------------------------------
 
-    pub fn get_id(&self) -> Id {
+    pub fn get_mac_address(&self) -> Id {
+        self.mac_address
+    }
+    pub fn get_localnet_id(&self) -> Id {
         self.localnet_id
+    }
+    pub fn is_root(&self) -> bool {
+        self.is_root
     }
     pub fn get_location(&self) -> LocalNetworkLocation {
         self.location
     }
-    pub fn is_root(&self) -> bool {
-        self.is_root
+    pub fn get_others_ids(&self) -> [Id; 3] {
+        self.others_ids
     }
 }
 

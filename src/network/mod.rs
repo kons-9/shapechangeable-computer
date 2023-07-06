@@ -1,21 +1,24 @@
 mod flit;
+mod flitbuffer;
 mod header;
-mod localnet;
+pub mod localnet;
 mod packet;
+mod protocol;
+mod sender;
 
 use crate::serial::Serial;
 use anyhow::Result;
 
-pub use flit::Coordinate;
-pub use flit::Id;
+use flit::{Coordinate, Flit, Id};
 use localnet::LocalNetwork;
+use packet::Packet;
 
-pub struct Network<'d> {
-    node_id: Option<Id>,
+pub struct NetworkNode<'d> {
+    /// now, mac address of localnet is used as node_id (in short, ip address = mac address)
+    ip_address: Id,
     neighbor_localnet_id_and_coordinate: Vec<(Id, Coordinate)>,
     localnet: LocalNetwork,
-    coordinate: Option<Coordinate>,
-    is_confirmed: bool,
+    coordinate: Coordinate,
     serial: Serial<'d>,
 
     // tree structure
@@ -23,39 +26,41 @@ pub struct Network<'d> {
     children: Vec<Id>,
 }
 
-impl<'d> Network<'d> {
+impl<'d> NetworkNode<'d> {
     pub fn new(serial: Serial<'d>) -> Self {
         let localnet = LocalNetwork::new();
+
         if localnet.is_root() {
-            Network {
-                node_id: Some(localnet.root_node_id()),
+            return NetworkNode {
+                ip_address: localnet.get_mac_address(),
                 neighbor_localnet_id_and_coordinate: Vec::new(),
-                coordinate: Some(localnet.root_coordinate()),
+                coordinate: localnet.root_coordinate(),
                 localnet,
-                is_confirmed: true,
                 serial,
 
                 parent: None,
                 children: Vec::new(),
-            }
-        } else {
-            Network {
-                node_id: None,
-                neighbor_localnet_id_and_coordinate: Vec::new(),
-                localnet,
-                coordinate: None,
-                is_confirmed: false,
-                serial,
+            };
+        }
+        // todo
+        let coordinate = (0, 0);
+        NetworkNode {
+            ip_address: localnet.get_mac_address(),
+            neighbor_localnet_id_and_coordinate: Vec::new(),
+            localnet,
+            coordinate,
+            serial,
 
-                parent: None,
-                children: Vec::new(),
-            }
+            parent: None,
+            children: Vec::new(),
         }
     }
 
-    pub fn is_connected(&self) -> bool {
-        unimplemented!();
+    pub fn send_string(&mut self, string: &str) -> Result<()> {
+        let packet = Packet::new(self.ip_address, string);
+        Ok(())
     }
+
     pub fn try_connect(&mut self) -> Result<Option<(Id, Coordinate)>> {
         if !self.is_connected() {
             Ok(None)

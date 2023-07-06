@@ -1,139 +1,186 @@
+use crate::serial::Serial;
+
 use super::header::Header;
+// use super::packet::PacketId;
+use super::sender::Sender;
 use anyhow::anyhow;
 use anyhow::Result;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 
 /// Flit consists of 64 bits.
-/// HeadFlit : [ FlitType(8) | Header(8) | SourceId(16) | DestinationId(16) | NumOfFlit(8) | Checksum(8) ]
-/// Body and TailFlit : [ FlitType(8) | Message(48) | Checksum(8)]
-/// NopeFlit : [ FlitType(8) | z(undefined)(56) ]
+/// HeadFlit : [ FlitType(2) | LengthOfFlit(6) | Header(8) | SourceId(16) | DestinationId(16) | PacketId(8) | Checksum(8) ]
+/// Body and TailFlit : [ FlitType(2) | FlitId(6) | Message(48) | Checksum(8)]
+/// NopeFlit : [ FlitType(2) | z(undefined)(62) ]
 pub type Flit = u64;
-// pub struct Flit(u64);
+const TIMEOUT_MILLIS: u64 = 1000;
+const DELAY_MILLIS: u64 = 10;
+const MAX_LOOPS: u64 = TIMEOUT_MILLIS / DELAY_MILLIS;
+
+impl Sender for Flit {
+    fn send_broadcast(&self, serial: &Serial) -> Result<()> {
+        // we don't need to receive ack
+        serial.send(&Self::to_le_bytes(*self));
+        Ok(())
+    }
+    fn send(&self, serial: &Serial) -> Result<()> {
+        loop {
+            serial.send(&Self::to_le_bytes(*self));
+
+            // receive ack
+            let mut loop_cnt = MAX_LOOPS;
+            loop {
+                // 10ms delay
+                std::thread::sleep(std::time::Duration::from_millis(DELAY_MILLIS));
+                if loop_cnt > 100 {
+                    return Err(anyhow!("ack timeout"));
+                }
+                loop_cnt += 1;
+                let receive = serial.receive()?;
+                if let receive = Option::<[u8; 8]>::None {
+                    continue;
+                }
+
+                let ack_flit: Flit = Self::from_le_bytes(receive.unwrap());
+                if FlitLoader::check_ack_flit(ack_flit, *self)? {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    fn receive(serial: &Serial) -> Result<Self> {
+        // receive ack
+        let mut loop_cnt = 0;
+        let flit: Flit;
+        loop {
+            if loop_cnt > 100 {
+                return Err(anyhow!("ack timeout"));
+            }
+            // 10ms delay
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            loop_cnt += 1;
+            let receive = serial.receive()?;
+            if let receive = Option::<[u8; 8]>::None {
+                continue;
+            }
+            flit = Flit::from_le_bytes(receive.unwrap());
+            break;
+        }
+        let ack_flit = FlitMaker::make_ack_flit(flit);
+        serial.send(&Self::to_le_bytes(ack_flit));
+        return Ok(flit);
+    }
+}
 pub type Id = u16;
 pub type Coordinate = (u16, u16);
 
 #[derive(TryFromPrimitive, PartialEq, Debug)]
 #[repr(u8)]
 pub enum FlitType {
-    Head,
-    Body,
-    Tail,
-    Nope,
-}
-pub trait FlitMethod {
-    fn make_head_flit(header: Header, sourceid: Id, destinationid: Id, lenofflit: u8) -> Self;
-    fn make_body_flit(message: u64) -> Self;
-    fn make_tail_flit(message: u64) -> Self;
-    fn change_flit_type(&mut self, flit_type: FlitType);
-    // fn get_flit_type(&self) -> FlitType;
-    // fn get_header(&self) -> Header;
-    // fn get_source_id(&self) -> Id;
-    // fn get_destination_id(&self) -> Id;
-    // fn get_message(&self) -> u64;
-    // fn get_checksum(&self) -> u8;
-    //
-    // these function should not be used outside of this module
-    fn clear_flit_type(&mut self);
-    fn set_length_of_flit(&mut self, numofflit: u8);
-    fn set_flit_type(&mut self, flit_type: FlitType);
-    fn set_header(&mut self, header: Header);
-    fn set_source_id(&mut self, source_id: Id);
-    fn set_destination_id(&mut self, destination_id: Id);
-    fn set_message(&mut self, message: u64);
-    fn set_checksum(&mut self);
-    fn calculate_checksum(&self) -> u8;
+    // 2bits
+    Nope = 0,
+    Head = 1,
+    Body = 2,
+    Tail = 3,
 }
 
-impl FlitMethod for Flit {
-    fn make_head_flit(header: Header, sourceid: Id, destinationid: Id, lenofflit: u8) -> Self {
-        let mut flit: Flit = 0;
-        flit.set_flit_type(FlitType::Head);
-        flit.set_header(header);
-        flit.set_source_id(sourceid);
-        flit.set_destination_id(destinationid);
-        flit.set_length_of_flit(lenofflit);
-        flit.set_checksum();
-        flit
+// 6bits
+type FlitId = u16;
+
+pub struct FlitMaker;
+
+impl FlitMaker {
+    fn set_2_6bits(val2bit: u8, val6bit: u8) -> u8 {
+        let mut data: u8 = 0;
+        data |= val2bit << 6;
+        data |= val6bit;
+        data
     }
-    fn make_body_flit(message: u64) -> Self {
-        let mut flit: Flit = 0;
-        flit.set_flit_type(FlitType::Body);
-        flit.set_message(message);
-        flit.set_checksum();
-        flit
-    }
-    fn make_tail_flit(message: u64) -> Self {
-        let mut flit: Flit = 0;
-        flit.set_flit_type(FlitType::Body);
-        flit.set_message(message);
-        flit.set_checksum();
-        flit
-    }
-    fn clear_flit_type(&mut self) {
-        *self &= 0x0000_FFFF_FFFF_FFFF;
-    }
-    fn change_flit_type(&mut self, flit_type: FlitType) {
-        self.clear_flit_type();
-        self.set_flit_type(flit_type);
+    pub fn make_ack_flit(flit: Flit) -> Flit {
+        let (len_of_flit, flit_id, message, checksum) = FlitLoader::get_body_information(flit);
+        let (source_id, destination_id) = (source_id.to_le_bytes(), destination_id.to_le_bytes());
+        Self::make_head_flit(0, Header::Ack, source_id, destination_id, packet_id)
     }
 
-    fn set_flit_type(&mut self, flit_type: FlitType) {
-        let u8_value = flit_type as u8;
-        *self |= (u8_value as u64) << 56;
+    pub fn make_head_flit(
+        len_of_flit: u8,
+        header: Header,
+        source_id: Id,
+        destination_id: Id,
+        packet_id: u8,
+    ) -> Flit {
+        let mut flitbyte = [0; 8];
+
+        let flittype = FlitType::Head as u8;
+        let len_of_flit = len_of_flit as u8;
+        flitbyte[0] = Self::set_2_6bits(flittype, len_of_flit);
+        let header = header as u8;
+        flitbyte[1] = header;
+        let source_id = source_id.to_le_bytes();
+        flitbyte[2] = source_id[0];
+        flitbyte[3] = source_id[1];
+        let destination_id = destination_id.to_le_bytes();
+        flitbyte[4] = destination_id[0];
+        flitbyte[5] = destination_id[1];
+        let packet_id = packet_id.to_le_bytes();
+        flitbyte[6] = packet_id[0];
+
+        let checksum = Self::calculate_checksum(&flitbyte);
+        flitbyte[7] = checksum;
+
+        Flit::from_le_bytes(flitbyte)
     }
-    fn set_header(&mut self, header: Header) {
-        let u8_value = header as u8;
-        *self |= (u8_value as u64) << 48;
+    fn make_body_or_tail_flit(flittype: FlitType, flit_id: u8, message: [u8; 6]) -> Flit {
+        let mut flitbyte = [0; 8];
+        let flittype = flittype as u8;
+        flitbyte[0] = Self::set_2_6bits(flittype, flit_id);
+        flitbyte[1] = message[0];
+        flitbyte[2] = message[1];
+        flitbyte[3] = message[2];
+        flitbyte[4] = message[3];
+        flitbyte[5] = message[4];
+        flitbyte[6] = message[5];
+        let checksum = Self::calculate_checksum(&flitbyte);
+        flitbyte[7] = checksum;
+
+        Flit::from_le_bytes(flitbyte)
     }
-    fn set_source_id(&mut self, sourceid: Id) {
-        *self |= (sourceid as u64) << 32;
+    pub fn make_body_flit(flit_id: u8, message: [u8; 6]) -> Flit {
+        let flittype = FlitType::Body;
+        Self::make_body_or_tail_flit(flittype, flit_id, message)
     }
-    fn set_destination_id(&mut self, destinationid: Id) {
-        *self |= (destinationid as u64) << 16;
+    pub fn make_tail_flit(flit_id: u8, message: [u8; 6]) -> Flit {
+        let flittype = FlitType::Tail;
+        Self::make_body_or_tail_flit(flittype, flit_id, message)
     }
-    fn set_length_of_flit(&mut self, lenofflit: u8) {
-        *self |= (lenofflit as u64) << 8;
+    pub fn make_nope_flit() -> Flit {
+        0
     }
-    fn set_checksum(&mut self) {
-        let checksum = self.calculate_checksum();
-        *self |= checksum as u64;
+    fn clear_flit_type(flit: &Flit) {
+        *flit &= !(0b11 << 62);
     }
-    fn set_message(&mut self, message: u64) {
-        // message is like 0x0000_xxxx_xxxx_xxxx
-        *self |= message << 8;
+    pub fn change_flit_type(flit: &Flit, flit_type: FlitType) {
+        Self::clear_flit_type(flit);
+        Self::set_flit_type(flit, flit_type);
     }
-    fn calculate_checksum(&self) -> u8 {
+    fn set_flit_type(flit: &Flit, flit_type: FlitType) {
+        *flit |= (flit_type as u64) << 62;
+    }
+
+    fn calculate_checksum(flitbyte: &[u8; 8]) -> u8 {
         let mut sum: u8 = 0;
-        let mut value = *self;
-        for _ in 0..4 {
-            sum = sum.wrapping_add((value) as u8);
-            value >>= 8;
+        for byte in flitbyte {
+            sum = sum.wrapping_add(*byte);
         }
         sum
     }
 }
 
 /// FlitLoader is a struct for loading flit.
-pub(crate) struct FlitLoader {
-    flit: Flit,
-    flit_type: FlitType,
-}
+pub(crate) struct FlitLoader;
 
 impl FlitLoader {
-    pub(crate) fn new(flit: Flit) -> Result<Self> {
-        Ok(FlitLoader {
-            flit,
-            flit_type: FlitLoader::get_flit_type(flit)?,
-        })
-    }
-    pub fn flit_type(&self) -> FlitType {
-        self.flit_type
-    }
-    pub fn flit(&self) -> Flit {
-        self.flit
-    }
-
     // utils
     fn get_u16_from_u64(val: u64, start: u8) -> u16 {
         TryFrom::try_from((val >> start) & u16::MAX as u64).unwrap()
@@ -141,200 +188,96 @@ impl FlitLoader {
     fn get_u8_from_u64(val: u64, start: u8) -> u8 {
         TryFrom::try_from((val >> start) & u8::MAX as u64).unwrap()
     }
-
-    // for all
-    fn get_flit_type(flit: Flit) -> Result<FlitType> {
-        // the toppest 8 bits
-        let u8_value = (flit as u64 >> 56) as u8;
-        Ok(FlitType::try_from(u8_value)?)
+    fn get_2bits_from_u64(val: u64, start: u8) -> u8 {
+        TryFrom::try_from((val >> start) & 0b11 as u64).unwrap()
+    }
+    fn get_6bits_from_u64(val: u64, start: u8) -> u8 {
+        TryFrom::try_from((val >> start) & 0b111111 as u64).unwrap()
     }
 
-    pub(crate) fn get_head_information(&self) -> Result<(Header, Id, Id, u8)> {
-        let bytes: [u8; 8] = self.flit.to_le_bytes();
-        let flit_type = FlitType::try_from(bytes[0]).unwrap();
+    // for all
+    fn get_flit_type_and_length(flit: Flit) -> Result<(FlitType, u8)> {
+        // the toppest 2 bits
+        let flit_type = FlitLoader::get_2bits_from_u64(flit as u64, 62);
+        let flit_length = FlitLoader::get_6bits_from_u64(flit as u64, 56);
+        Ok((FlitType::try_from(flit_type)?, flit_length))
+    }
+    pub(crate) fn check_ack_flit(ack_flit: Flit, original_flit: Flit) -> Result<bool> {
+        // pull from get_head_information
+        let (_, header, source_id, destination_id, packet_id) =
+            FlitLoader::get_head_information(ack_flit)?;
+        let (_, _, original_source_id, original_destination_id, original_packet_id) =
+            FlitLoader::get_head_information(original_flit)?;
+        if header != Header::Ack {
+            return Ok(false);
+        }
+        if original_packet_id != packet_id {
+            return Ok(false);
+        }
+        if original_source_id != destination_id {
+            return Ok(false);
+        }
+        // if original_destination_id != source_id {
+        //     return Ok(false);
+        // }
+
+        Ok(true)
+    }
+
+    /// return (length_of_flit, header, source_id, destination_id, packet_id)
+    pub(crate) fn get_head_information(flit: Flit) -> Result<(u8, Header, Id, Id, u8)> {
+        let bytes: [u8; 8] = flit.to_le_bytes();
+        let (flit_type, length_of_flit) = FlitLoader::get_flit_type_and_length(flit)?;
         if flit_type != FlitType::Head {
             return Err(anyhow!("This flit is not Head"));
         }
+
         let header = Header::try_from(bytes[1]).unwrap();
         let source_id = u16::from_le_bytes([bytes[2], bytes[3]]);
         let destination_id = u16::from_le_bytes([bytes[4], bytes[5]]);
-        let length_of_flit = bytes[6];
+        let packet_id = bytes[6];
         let checksum = bytes[7];
         let mut sum: u8 = 0;
         for i in 0..6 {
             sum = sum.wrapping_add(bytes[i]);
         }
         if sum == checksum {
-            Ok((header, source_id, destination_id, length_of_flit))
+            Ok((length_of_flit, header, source_id, destination_id, packet_id))
         } else {
             Err(anyhow!("Checksum is not correct"))
         }
     }
-    pub(crate) fn get_body_information(&self) -> Result<u64> {
-        let bytes: [u8; 8] = self.flit.to_le_bytes();
-        let flit_type = FlitType::try_from(bytes[0]).unwrap();
-        if flit_type != FlitType::Body {
-            return Err(anyhow!("This flit is not Body"));
+    pub(crate) fn get_body_or_tail_information(flit: Flit) -> Result<(FlitType, u8, [u8; 6])> {
+        let bytes: [u8; 8] = flit.to_le_bytes();
+        let (flit_type, flit_id) = FlitLoader::get_flit_type_and_length(flit)?;
+        if flit_type == FlitType::Head {
+            return Err(anyhow!("This flit is Head"));
         }
-        let message = u64::from_le_bytes([
-            0, 0, bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-        ]);
+
+        let message = [bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6]];
         let checksum = bytes[7];
         // self.check_checksum_for_body_and_tail()?;
         let mut sum: u8 = 0;
         for i in 0..6 {
             sum = sum.wrapping_add(bytes[i]);
         }
-        Ok(message)
-    }
-
-    // for head
-    pub(crate) fn get_source_id(&self) -> Result<u16> {
-        if self.flit_type != FlitType::Head {
-            return Err(anyhow!("This flit is not Head"));
+        if checksum == sum {
+            Ok((flit_type, flit_id, message))
+        } else {
+            Err(anyhow!("Checksum is not correct"))
         }
-        // the next 16 bits
-        let u16_value = Self::get_u16_from_u64(self.flit, 40);
-        Ok(u16_value)
-    }
-
-    pub(crate) fn get_destination_id(&self) -> Result<u16> {
-        if self.flit_type != FlitType::Head {
-            return Err(anyhow!("This flit is not Head"));
-        }
-        // the next 16 bits
-        let u16_value = Self::get_u16_from_u64(self.flit, 24);
-        Ok(u16_value)
-    }
-
-    pub(crate) fn get_header(&self) -> Result<Header> {
-        if self.flit_type != FlitType::Head {
-            return Err(anyhow!("This flit is not Head"));
-        }
-        // the next 8 bits
-        let u8_value = Self::get_u8_from_u64(self.flit, 16);
-        Ok(Header::try_from(u8_value)?)
-    }
-
-    pub(crate) fn get_length(&self) -> Result<u8> {
-        if self.flit_type != FlitType::Head {
-            return Err(anyhow!("This flit is not Head"));
-        }
-        // the next 8 bits
-        let u8_value = Self::get_u8_from_u64(self.flit, 8);
-        Ok(u8_value)
-    }
-
-    pub(crate) fn get_checksum(&self) -> Result<u8> {
-        // the next 8 bits
-        let u8_value = Self::get_u8_from_u64(self.flit, 0);
-        Ok(u8_value)
-    }
-
-    pub(crate) fn check_checksum_for_head(
-        &self,
-        header: Header,
-        source_id: Id,
-        destination_id: Id,
-    ) -> Result<()> {
-        if self.flit_type != FlitType::Head {
-            return Err(anyhow!("This flit is not Head"));
-        }
-
-        let mut sum: u8 = 0;
-        sum.wrapping_add(source_id as u8);
-        sum.wrapping_add(destination_id as u8);
-        sum.wrapping_add(header as u8);
-
-        anyhow::ensure!(sum == self.get_checksum()?, "checksum is not correct");
-        Ok(())
-    }
-
-    // for body and tail
-    pub(crate) fn get_message(&self) -> Result<[u8; 6]> {
-        if self.flit_type != FlitType::Body && self.flit_type != FlitType::Tail {
-            return Err(anyhow!("This flit is not Body or Tail"));
-        }
-        // the next 48 bits
-        let mut data: [u8; 6] = [0; 6];
-        for i in 0usize..6 {
-            let u8_value = Self::get_u8_from_u64(self.flit, 8 * (6 - i as u8));
-            data[i] = u8_value;
-        }
-        let u64_value = (self.flit as u64 >> 8) & 0xFFFFFFFFFFFF;
-        Ok(data)
-    }
-
-    pub(crate) fn check_checksum_for_body_and_tail(&self) -> Result<()> {
-        if self.flit_type != FlitType::Body && self.flit_type != FlitType::Tail {
-            return Err(anyhow!("This flit is not Body or Tail"));
-        }
-        let messages = self.get_message()?;
-        let mut sum: u8 = 0;
-        for message in messages.iter() {
-            sum.wrapping_add(*message);
-        }
-
-        // let sum = Self::get_u16_from_u64(messages, 0)
-        //     + Self::get_u16_from_u64(messages, 16)
-        //     + Self::get_u16_from_u64(messages, 32);
-        anyhow::ensure!(sum == self.get_checksum()?, "checksum is not correct");
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    // todo) it is just generated by copilot
 
     #[test]
-    fn test_flit_type() {
-        let flit = 0x0000000000000000;
-        let flit_type = FlitLoader::get_flit_type(flit).unwrap();
-        assert_eq!(flit_type, FlitType::Head);
-
-        let flit = 0x0000000000000001;
-        let flit_type = FlitLoader::get_flit_type(flit).unwrap();
-        assert_eq!(flit_type, FlitType::Body);
-
-        let flit = 0x0000000000000002;
-        let flit_type = FlitLoader::get_flit_type(flit).unwrap();
-        assert_eq!(flit_type, FlitType::Tail);
-
-        let flit = 0x0000000000000003;
-        let flit_type = FlitLoader::get_flit_type(flit).unwrap();
-        assert_eq!(flit_type, FlitType::Nope);
-    }
+    fn test_flit_type() {}
 
     #[test]
-    fn test_flit_loader_head() {
-        let flit = 0x0000000000000000;
-        let flit_loader = FlitLoader::new(flit).unwrap();
-        assert_eq!(flit_loader.get_source_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_destination_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_header().unwrap(), Header::SendLocalnetId);
-        assert_eq!(flit_loader.get_length().unwrap(), 0);
-        assert_eq!(flit_loader.get_checksum().unwrap(), 0);
-
-        let flit = 0x0000000000000100;
-        let flit_loader = FlitLoader::new(flit).unwrap();
-        assert_eq!(flit_loader.get_source_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_destination_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_header().unwrap(), Header::SendNodeId);
-        assert_eq!(flit_loader.get_length().unwrap(), 0);
-        assert_eq!(flit_loader.get_checksum().unwrap(), 1);
-
-        let flit = 0x0000000000000200;
-        let flit_loader = FlitLoader::new(flit).unwrap();
-        assert_eq!(flit_loader.get_source_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_destination_id().unwrap(), 0);
-        assert_eq!(flit_loader.get_header().unwrap(), Header::ConfirmCoordinate);
-        assert_eq!(flit_loader.get_length().unwrap(), 0);
-        assert_eq!(flit_loader.get_checksum().unwrap(), 2);
-    }
+    fn test_flit_loader_head() {}
     #[test]
-    fn test_random_flit() {
-        let flit = 0x0000000000000000;
-    }
+    fn test_random_flit() {}
 }

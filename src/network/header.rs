@@ -1,15 +1,17 @@
 use num_enum::TryFromPrimitive;
 
-#[derive(TryFromPrimitive, PartialEq, Debug)]
+/// todo) now we use only data and ack header
+#[derive(TryFromPrimitive, Eq, PartialEq, Debug)]
 #[repr(u8)]
 pub enum Header {
+    // BroadCast headers
+    GetNeighborId,
+
     // for making localnet
     /// LocalnetId + NodeId
-    SendLocalnetId,
-    SendNodeId,
-    GetConnectedNeighborCoordinate,
     ShareNeighborCoordinate,
     ConfirmCoordinate,
+    SendNodeId,
 
     // for making tree
     SendParentId,
@@ -17,15 +19,14 @@ pub enum Header {
     SendChildId,
     ReceiveChildId,
 
+    // normal data
+    Data,
+
     // for reply
     Ack,
 
     // for error
-    HeaderError,
-    FilterError,
-    FromError,
-    ToError,
-    CheckSumError,
+    DataError,
     EtcError,
 }
 
@@ -34,6 +35,7 @@ impl Header {
     pub fn is_only_head(&self) -> bool {
         match self {
             Header::SendLocalnetId
+            | Header::Data
             | Header::SendNodeId
             | Header::GetConnectedNeighborCoordinate
             | Header::ShareNeighborCoordinate
@@ -42,7 +44,8 @@ impl Header {
             | Header::ReceiveParentId
             | Header::SendChildId
             | Header::ReceiveChildId
-            | Header::Ack => false,
+            | Header::DataError
+            | Header::EtcError => false,
             _ => true,
         }
     }

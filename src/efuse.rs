@@ -1,11 +1,18 @@
-use crate::localnet::LocalNetworkLocation;
+use crate::network::localnet::LocalNetworkLocation;
 
 // ------------------------------
 // const
 // ------------------------------
 
-const ROOT_MASK: u32 = 0x00000001;
-const LOCALNET_MASK: u32 = 0x00000006;
+// ID type is u16, so I use lower order 16 bits of u32
+const ROOT_MASK: u32 = 0x0000_0001;
+const ROOT_SHIFT: u32 = 0;
+const LOCALNET_LOCATION_MASK: u32 = 0b0000_0000_0000_0110;
+const LOCALNET_LOCATION_SHIFT: u32 = 1;
+const LOCALNET_ID_MASK: u32 = 0b1111_1111_1111_1000;
+const LOCALNET_ID_SHIFT: u32 = 3;
+const MAC_ADDRESS_MASK: u32 = 0b1111_1111_1111_1111;
+const MAC_ADDRESS_SHIFT: u32 = 0;
 
 pub const ROOT: u32 = 0x00000001;
 pub const LOCALNET_UPLEFT: u32 = 0x00000000;
@@ -47,22 +54,47 @@ impl Efuse {
         }
     }
 
-    pub fn get_localnet(&self) -> u32 {
-        self.block3[7] & LOCALNET_MASK
+    // raw value of efuse
+    pub fn get_raw_localnet_id(&self) -> u32 {
+        self.block3[7] & LOCALNET_ID_MASK
+    }
+    pub fn get_raw_mac_address(&self) -> u32 {
+        self.block3[7] & MAC_ADDRESS_MASK
+    }
+    pub fn get_raw_localnet_location(&self) -> u32 {
+        self.block3[7] & LOCALNET_LOCATION_MASK
+    }
+    pub fn get_raw_root(&self) -> u32 {
+        self.block3[7] & ROOT_MASK
+    }
+
+    // convenient value of efuse
+    pub fn get_localnet_id(&self) -> u32 {
+        (self.block3[7] & LOCALNET_ID_MASK) >> LOCALNET_ID_SHIFT
+    }
+    pub fn get_mac_address(&self) -> u32 {
+        (self.block3[7] & MAC_ADDRESS_MASK) >> MAC_ADDRESS_SHIFT
+    }
+    pub fn get_localnet_location(&self) -> u32 {
+        (self.block3[7] & LOCALNET_LOCATION_MASK) >> LOCALNET_LOCATION_SHIFT
     }
     pub fn is_root(&self) -> bool {
-        self.block3[7] & ROOT_MASK == ROOT
+        (self.block3[7] & ROOT_MASK) >> ROOT_SHIFT == ROOT
     }
 
     pub fn efuse_to_localnet(&self) -> LocalNetworkLocation {
-        match self.get_localnet() {
+        match self.get_raw_localnet_location() {
             LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
             LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
             LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
             LOCALNET_DOWNRIGHT => LocalNetworkLocation::DownRight,
             _ => panic!(
-                "Invalid localnet: localnet is less than 5, but {}",
-                self.get_localnet()
+                "Invalid localnet: localnet is less than 5, but {}, 
+                raw_localnet_location: {},
+                mac_address: {}",
+                self.get_localnet_location(),
+                self.get_raw_localnet_location(),
+                self.get_mac_address()
             ),
         }
     }
