@@ -81,9 +81,8 @@ impl Efuse {
     pub fn is_root(&self) -> bool {
         (self.block3[7] & ROOT_MASK) >> ROOT_SHIFT == ROOT
     }
-
-    pub fn efuse_to_localnet(&self) -> LocalNetworkLocation {
-        match self.get_raw_localnet_location() {
+    pub fn from(efuse: &Efuse) -> LocalNetworkLocation {
+        match efuse.get_raw_localnet_location() {
             LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
             LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
             LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
@@ -92,10 +91,13 @@ impl Efuse {
                 "Invalid localnet: localnet is less than 5, but {}, 
                 raw_localnet_location: {},
                 mac_address: {}",
-                self.get_localnet_location(),
-                self.get_raw_localnet_location(),
-                self.get_mac_address()
+                efuse.get_localnet_location(),
+                efuse.get_raw_localnet_location(),
+                efuse.get_mac_address()
             ),
         }
+        // efuse.efuse_to_localnet()
     }
+
+    // pub fn efuse_to_localnet(&self) -> LocalNetworkLocation {}
 }

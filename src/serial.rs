@@ -5,6 +5,9 @@ use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::uart::{Uart, UartConfig, UartDriver};
 
+/// rapper of UartDriver
+/// we only read and write 8 bytes because flit size is 8 bytes
+/// todo: when a signal is received, push it to the original buffer by interrupt
 pub struct Serial<'d> {
     uart_driver: UartDriver<'d>,
 }
@@ -18,11 +21,6 @@ impl<'d> Serial<'d> {
         // rts: Option<impl Peripheral<P = impl OutputPin> + 'd>,
         hertz: u32,
     ) -> Self {
-        // Peripherals
-        // let periperal = Peripherals::take().expect("never fails");
-
-        // let tx = periperal.pins.gpio21;
-        // let rx = periperal.pins.gpio20;
         let config = UartConfig::default().baudrate(Hertz(hertz));
 
         let uart_driver = UartDriver::new(
@@ -36,18 +34,34 @@ impl<'d> Serial<'d> {
         .unwrap();
         Serial { uart_driver }
     }
-    pub fn send(&self, data: &[u8]) -> Result<usize> {
-        Ok(self.uart_driver.write(data)?)
+    /// send [u8; 8] to arduino
+    pub fn send(&self, data: &[u8; 8]) -> Result<()> {
+        let length = self.uart_driver.write(data)?;
+        if length != 8 {
+            return Err(anyhow::anyhow!("uart write error"));
+        }
+        Ok(())
     }
+    /// receive [u8; 8] from arduino
     pub fn receive(&self) -> Result<Option<[u8; 8]>> {
-        // todo arduino rx buffer may overflow, so we need to handle it
+        // todo: arduino rx buffer may overflow, so we need to handle it by interrupt
 
         // pull u64 from uart_driver
         let mut buffer = [0; 8];
         let byte = self.uart_driver.read(&mut buffer, 0)?;
         if byte != 8 {
+            // todo: maybe we should flush read buffer
             return Ok(None);
         }
         Ok(Some(buffer))
+    }
+    /// flush read buffer
+    pub fn flush_read(&self) -> Result<()> {
+        Ok(self.uart_driver.flush_read()?)
+    }
+
+    /// flush write buffer
+    pub fn flush_write(&self) -> Result<()> {
+        Ok(self.uart_driver.flush_write()?)
     }
 }

@@ -2,33 +2,34 @@ use crate::serial::Serial;
 
 use super::flit::{Flit, FlitLoader, FlitMaker, FlitType, Id};
 use super::header::Header;
+use super::protocol::{DefaultProtocol, Protocol};
 use super::sender::Sender;
 use anyhow::{anyhow, Result};
 
-type From = Id;
+type FromId = Id;
 pub type PacketId = u8;
 
 // broadcast is represented by 0xFFFF
 // localnet is only used when making localnet
-#[derive(Debug, Eq, PartialEq)]
-enum To {
-    Node(Id),
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum ToId {
+    Unicast(Id),
     Broadcast,
 }
 
-impl To {
+impl ToId {
     fn to_id(&self) -> Id {
         // todo
         match self {
-            To::Node(id) => *id,
-            To::Broadcast => 0xFFFF,
+            ToId::Unicast(id) => *id,
+            ToId::Broadcast => 0xFFFF,
         }
     }
     fn from_id(id: Id) -> Self {
         // todo
         match id {
-            0xFFFF => To::Broadcast,
-            _ => To::Node(id),
+            0xFFFF => ToId::Broadcast,
+            _ => ToId::Unicast(id),
         }
     }
 }
@@ -37,30 +38,30 @@ impl To {
 pub struct Packet {
     packet_id: PacketId,
     header: Header,
-    from: From,
-    to: To,
+    from: FromId,
+    to: ToId,
     messages: Vec<u8>,
     /// last 2 items represent checksum
     checksum: u16,
     length_of_flit: usize,
 }
 
-impl Sender for Packet {
-    fn send_broadcast(&self, serial: &Serial) -> Result<()> {
-        let flits = self.to_flits();
+impl Packet {
+    pub fn send_broadcast(&self, serial: &Serial) -> Result<()> {
+        let flits = self.to_flits(Option::<&DefaultProtocol>::None);
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    fn send(&self, serial: &Serial) -> Result<()> {
-        let flits = self.to_flits();
+    pub fn send(&self, serial: &Serial, protocol: &impl Protocol) -> Result<()> {
+        let flits = self.to_flits(Option::Some(protocol));
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    fn receive(serial: &Serial) -> Result<Self> {
+    pub fn receive(serial: &Serial) -> Result<Self> {
         let mut flits = Vec::new();
         let flit = Flit::receive(serial)?;
         let (length_of_flit, _, _, _, _) = FlitLoader::get_head_information(flit)?;
@@ -71,14 +72,11 @@ impl Sender for Packet {
         }
         Self::from_flits(flits)
     }
-}
-
-impl Packet {
     pub fn new(
         packet_id: PacketId,
         header: Header,
-        from: From,
-        to: To,
+        from: FromId,
+        to: ToId,
         mut messages: Vec<u8>,
     ) -> Result<Self> {
         let checksum = Self::calculate_checksum(&messages);
@@ -104,20 +102,31 @@ impl Packet {
     fn calculate_checksum(data: &Vec<u8>) -> u16 {
         let mut sum: u16 = 0;
         for byte in data {
-            sum.wrapping_add(*byte as u16);
+            sum = sum.wrapping_add(*byte as u16);
         }
         sum
     }
+    pub fn change_from(&mut self, from: FromId) {
+        self.from = from;
+    }
 
-    pub fn to_flits(&self) -> Vec<Flit> {
+    pub fn to_flits(&self, routing: Option<&impl Protocol>) -> Vec<Flit> {
         // todo: should remake according to header, because some of them don't need tail_flit owing
         // to size of packet. it is more effecient.
         //
+        //
+        let id = self.to;
+        let next_id = if id == ToId::Broadcast {
+            id.to_id()
+        } else {
+            routing.unwrap().get_next_node(self.from, id.to_id())
+        };
+
         let mut flits = vec![FlitMaker::make_head_flit(
             self.length_of_flit as u8,
             self.header,
             self.from,
-            self.to.to_id(),
+            next_id,
             self.packet_id,
         )];
 
@@ -125,14 +134,9 @@ impl Packet {
             return flits;
         }
         // one message can have 48bit(6byte)
+        let mut data = self.make_first_message();
 
         // add packet id and checksum
-        let mut data: [u8; 6] = [0; 6];
-
-        data[0] = self.packet_id;
-        let checksum = self.checksum.to_le_bytes();
-        data[1] = checksum[0];
-        data[2] = checksum[1];
 
         if self.messages.len() == 0 {
             let tail_flit = FlitMaker::make_tail_flit(1, data);
@@ -152,14 +156,26 @@ impl Packet {
             let body_flit = FlitMaker::make_body_flit(flit_id, data);
             flits.push(body_flit);
         }
-        FlitMaker::change_flit_type(&flits[self.length_of_flit - 1], FlitType::Tail);
+        FlitMaker::change_flit_type(&mut flits[self.length_of_flit - 1], FlitType::Tail);
 
         flits
+    }
+    fn make_first_message(&self) -> [u8; 6] {
+        let mut data: [u8; 6] = [0; 6];
+
+        data[0] = self.packet_id;
+        let checksum = self.checksum.to_le_bytes();
+        data[1] = checksum[0];
+        data[2] = checksum[1];
+        let ids = self.to.to_id().to_le_bytes();
+        data[3] = ids[0];
+        data[4] = ids[1];
+        return data;
     }
     fn check_checksum(data: &Vec<u8>) -> bool {
         let mut sum: u16 = 0;
         for i in 0..data.len() - 2 {
-            sum.wrapping_add(data[i] as u16);
+            sum = sum.wrapping_add(data[i] as u16);
         }
         let checksum = u16::from_le_bytes([data[data.len() - 2], data[data.len() - 1]]);
         sum == checksum
@@ -168,16 +184,21 @@ impl Packet {
     pub fn from_flits(flits: Vec<Flit>) -> Result<Packet> {
         let (length_of_flit, header, from, to, packet_id) =
             FlitLoader::get_head_information(flits[0])?;
-        let to = To::from_id(to);
+        let to = ToId::from_id(to);
         let length_of_flit = length_of_flit.into();
 
         let mut data = Vec::new();
 
         for i in 1..length_of_flit {
             let (flittype, flit_id, message) = FlitLoader::get_body_or_tail_information(flits[i])?;
+            if flit_id as usize != i {
+                return Err(anyhow!("The flit id is not correct."));
+            }
+
             if flittype == FlitType::Tail && i != length_of_flit - 1 {
                 return Err(anyhow!("The flit is not last but Tail."));
             }
+
             for j in message {
                 data.push(j);
             }
@@ -187,6 +208,47 @@ impl Packet {
         } else {
             Err(anyhow!("Checksum is not correct"))
         }
+    }
+
+    // getter
+    pub fn get_packet_id(&self) -> PacketId {
+        self.packet_id
+    }
+    pub fn get_header(&self) -> Header {
+        self.header
+    }
+    pub fn get_from(&self) -> FromId {
+        self.from
+    }
+    pub fn get_to(&self) -> ToId {
+        self.to
+    }
+    pub fn get_messages(self) -> Vec<u8> {
+        self.messages
+    }
+    pub fn get_all(self) -> (PacketId, Header, FromId, Id, Vec<u8>) {
+        (
+            self.packet_id,
+            self.header,
+            self.from,
+            self.to.to_id(),
+            self.messages,
+        )
+    }
+}
+/// PacketManager is a struct that makes/loads common packet.
+/// It is used for initialization of network.
+struct PacketManager;
+impl PacketMaker {
+    pub fn make_packet(
+        packet_id: PacketId,
+        header: Header,
+        from: FromId,
+        to: ToId,
+        messages: Vec<u8>,
+    ) -> Result<Packet> {
+        let packet = Packet::new(packet_id, header, from, to, messages)?;
+        Ok(packet)
     }
 }
 
@@ -199,11 +261,13 @@ mod test {
     fn test() {
         let data: &str = "hello world";
         let packet_data = data.as_bytes().to_vec();
-        let packet = Packet::new(0, Header::Data, 0, To::Node(1), packet_data).unwrap();
-        let flits = packet.to_flits();
+        let packet = Packet::new(0, Header::Data, 0, ToId::Unicast(1), packet_data).unwrap();
+        let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
         let trans_packet = Packet::from_flits(flits).unwrap();
-        let trans_data: &str = String::from_utf8(trans_packet.messages).unwrap().as_str();
+        assert_eq!(packet, trans_packet);
+        let trans_data = String::from_utf8(trans_packet.messages);
+        let trans_data = trans_data.unwrap();
+        let trans_data = trans_data.as_str();
         assert_eq!(data, trans_data);
-        assert_eq!(packet, trans_packet)
     }
 }

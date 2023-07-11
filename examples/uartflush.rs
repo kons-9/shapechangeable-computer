@@ -1,3 +1,5 @@
+/// use flush function.
+/// this example cannnot overflow but you can only see one output.
 use std::{thread, time::Duration};
 
 use anyhow::Result;
@@ -24,6 +26,15 @@ fn main() -> Result<()> {
                 println!("SendError: {:?}", e);
             }
         }
+        match serial.send(b"hellostd") {
+            Ok(_) => {
+                println!("Sent: hellostd");
+                println!("{:?}", b"hellostd");
+            }
+            Err(e) => {
+                println!("SendError: {:?}", e);
+            }
+        }
         let data = match serial.receive() {
             Ok(data) => data,
             Err(e) => {
@@ -31,6 +42,8 @@ fn main() -> Result<()> {
                 None
             }
         };
+        // maybe serial output is only hello!!! or hellostd
+        serial.flush()?;
         match data {
             Some(t) => {
                 println!("Received: {:?}", t);

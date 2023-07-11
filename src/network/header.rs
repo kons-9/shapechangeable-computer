@@ -1,11 +1,12 @@
 use num_enum::TryFromPrimitive;
 
 /// todo) now we use only data and ack header
-#[derive(TryFromPrimitive, Eq, PartialEq, Debug)]
+#[derive(TryFromPrimitive, Eq, PartialEq, Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum Header {
     // BroadCast headers
     GetNeighborId,
+    RequestConfirmedCoordinate,
 
     // for making localnet
     /// LocalnetId + NodeId
@@ -34,10 +35,8 @@ impl Header {
     // todo) consider whether to use body and tail flits
     pub fn is_only_head(&self) -> bool {
         match self {
-            Header::SendLocalnetId
-            | Header::Data
+            Header::Data
             | Header::SendNodeId
-            | Header::GetConnectedNeighborCoordinate
             | Header::ShareNeighborCoordinate
             | Header::ConfirmCoordinate
             | Header::SendParentId
@@ -46,7 +45,7 @@ impl Header {
             | Header::ReceiveChildId
             | Header::DataError
             | Header::EtcError => false,
-            _ => true,
+            Header::Ack | Header::GetNeighborId => true,
         }
     }
 }

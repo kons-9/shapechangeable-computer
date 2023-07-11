@@ -1,10 +1,9 @@
-use super::flit::{Flit, FlitLoader, FlitMaker, FlitType, Id};
-use super::packet::Packet;
+use super::flit::{Coordinate, Id};
 
-use crate::efuse::{
-    Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT,
+use crate::{
+    efuse::{Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT},
+    serial::Serial,
 };
-use rand::Rng;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LocalNetworkLocation {
@@ -12,6 +11,56 @@ pub enum LocalNetworkLocation {
     UpRight,
     DownLeft,
     DownRight,
+}
+
+impl LocalNetworkLocation {
+    pub fn diagonal_location(&self) -> LocalNetworkLocation {
+        match self {
+            LocalNetworkLocation::UpLeft => LocalNetworkLocation::DownRight,
+            LocalNetworkLocation::UpRight => LocalNetworkLocation::DownLeft,
+            LocalNetworkLocation::DownLeft => LocalNetworkLocation::UpRight,
+            LocalNetworkLocation::DownRight => LocalNetworkLocation::UpLeft,
+        }
+    }
+    pub fn get_root_coordinate(&self) -> Coordinate {
+        match &self {
+            LocalNetworkLocation::UpLeft => (0, 1),
+            LocalNetworkLocation::UpRight => (1, 1),
+            LocalNetworkLocation::DownLeft => (0, 0),
+            LocalNetworkLocation::DownRight => (1, 0),
+        }
+    }
+    pub fn from_id(id: Id) -> Self {
+        let id = (id & 0b110) as u32;
+        match id {
+            LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
+            LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
+            LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
+            LOCALNET_DOWNRIGHT => LocalNetworkLocation::DownRight,
+            _ => panic!("Invalid localnet: localnet is less than 5, but {}", id),
+        }
+    }
+}
+impl From<LocalNetworkLocation> for u32 {
+    fn from(value: LocalNetworkLocation) -> Self {
+        match value {
+            LocalNetworkLocation::UpLeft => LOCALNET_UPLEFT,
+            LocalNetworkLocation::UpRight => LOCALNET_UPRIGHT,
+            LocalNetworkLocation::DownLeft => LOCALNET_DOWNLEFT,
+            LocalNetworkLocation::DownRight => LOCALNET_DOWNRIGHT,
+        }
+    }
+}
+impl From<u32> for LocalNetworkLocation {
+    fn from(value: u32) -> Self {
+        match value {
+            LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
+            LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
+            LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
+            LOCALNET_DOWNRIGHT => LocalNetworkLocation::DownRight,
+            _ => panic!("Invalid localnet: localnet is less than 5, but {}", value),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -23,7 +72,8 @@ pub struct LocalNetwork {
     /// it is about global network. so we read efuse value.
     is_root: bool,
     /// neighbor ids
-    others_ids: [Id; 3],
+    neighbor_ids: [Id; 2],
+    diagonal_id: Id,
     /// mac address
     mac_address: Id,
 }
@@ -35,51 +85,70 @@ impl LocalNetwork {
     /// others are slaves.
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
-        let location: LocalNetworkLocation = efuse.efuse_to_localnet();
+        let location: LocalNetworkLocation = Efuse::from(&efuse);
         let localnet_id = efuse.get_localnet_id() as Id;
         let mac_address = efuse.get_mac_address() as Id;
         let is_root = efuse.is_root();
 
         // localnet nodes' form is like this:
         // 0x00000000 [ localnet_id ] [ location ] [ is_root ]
-        let others_ids = {
+        let (neighbor_ids, diagonal_id) = {
             let raw_localnet = efuse.get_raw_localnet_id();
             let raw_location = efuse.get_raw_localnet_location();
             let raw_is_root = efuse.get_raw_root();
 
-            let mut ids = [0; 3];
+            let diagonal_location = location.diagonal_location();
+            let raw_diagonal_location: u32 = diagonal_location.into();
+            let diagonal_id = (raw_localnet | raw_diagonal_location | raw_is_root) as Id;
+
+            let mut ids = [0; 2];
             let mut index = 0;
             for raw_other_location in (0..8).step_by(2) {
                 if raw_location == raw_other_location {
+                    continue;
+                }
+                if raw_diagonal_location == raw_other_location {
                     continue;
                 }
                 let id = raw_localnet | raw_other_location | raw_is_root;
                 ids[index] = id as Id;
                 index += 1;
             }
-            ids
+            (ids, diagonal_id)
         };
 
         LocalNetwork {
             location,
             localnet_id,
             is_root,
-            others_ids,
+            neighbor_ids,
+            diagonal_id,
+
             mac_address,
         }
+    }
+    /// send broadcast flit and receive coordinate of neighbor nodes.
+    pub fn is_ready(&self, serial: &Serial) -> bool {
+        unimplemented!();
+    }
+    pub fn get_coordinate(&self, _serial: &Serial) -> Coordinate {
+        unimplemented!();
+    }
+    pub fn get_nodes_in_localnet(&self) -> Vec<Id> {
+        let mut ids = Vec::new();
+        for node in self.neighbor_ids.iter() {
+            ids.push(*node);
+        }
+        ids.push(self.diagonal_id);
+        ids
     }
 
     // ------------------------------
     // only for root
     // ------------------------------
 
-    pub fn root_coordinate(&self) -> (Id, Id) {
-        match &self.location {
-            LocalNetworkLocation::UpLeft => (0, 1),
-            LocalNetworkLocation::UpRight => (1, 1),
-            LocalNetworkLocation::DownLeft => (0, 0),
-            LocalNetworkLocation::DownRight => (1, 0),
-        }
+    pub fn root_coordinate(&self) -> Coordinate {
+        self.location.get_root_coordinate()
     }
 
     // ------------------------------
@@ -98,13 +167,17 @@ impl LocalNetwork {
     pub fn get_location(&self) -> LocalNetworkLocation {
         self.location
     }
-    pub fn get_others_ids(&self) -> [Id; 3] {
-        self.others_ids
+    pub fn get_neighbor_ids(&self) -> [Id; 2] {
+        self.neighbor_ids
+    }
+    pub fn get_diagonal_id(&self) -> Id {
+        self.diagonal_id
     }
 }
 
 // test
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
@@ -112,7 +185,7 @@ mod tests {
         // root and upleft
         let mut block3 = [0; 8];
         block3[7] = 0x00000001;
-        let efuse = Efuse { block3 };
+        // let efuse = Efuse { block3 };
 
         let localnet = LocalNetwork::new();
         println!("{:?}", localnet);

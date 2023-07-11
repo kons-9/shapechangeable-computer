@@ -1,3 +1,4 @@
+/// you can see the overflow in your display output
 use std::{thread, time::Duration};
 
 use anyhow::Result;
@@ -19,6 +20,15 @@ fn main() -> Result<()> {
             Ok(_) => {
                 println!("Sent: hello!!!");
                 println!("{:?}", b"hello!!!");
+            }
+            Err(e) => {
+                println!("SendError: {:?}", e);
+            }
+        }
+        match serial.send(b"hellostd") {
+            Ok(_) => {
+                println!("Sent: hellostd");
+                println!("{:?}", b"hellostd");
             }
             Err(e) => {
                 println!("SendError: {:?}", e);

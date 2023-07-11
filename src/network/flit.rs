@@ -1,6 +1,7 @@
 use crate::serial::Serial;
 
 use super::header::Header;
+use super::packet::PacketId;
 // use super::packet::PacketId;
 use super::sender::Sender;
 use anyhow::anyhow;
@@ -13,6 +14,10 @@ use std::convert::TryFrom;
 /// Body and TailFlit : [ FlitType(2) | FlitId(6) | Message(48) | Checksum(8)]
 /// NopeFlit : [ FlitType(2) | z(undefined)(62) ]
 pub type Flit = u64;
+
+// 6bits
+type FlitId = u8;
+
 const TIMEOUT_MILLIS: u64 = 1000;
 const DELAY_MILLIS: u64 = 10;
 const MAX_LOOPS: u64 = TIMEOUT_MILLIS / DELAY_MILLIS;
@@ -20,12 +25,12 @@ const MAX_LOOPS: u64 = TIMEOUT_MILLIS / DELAY_MILLIS;
 impl Sender for Flit {
     fn send_broadcast(&self, serial: &Serial) -> Result<()> {
         // we don't need to receive ack
-        serial.send(&Self::to_le_bytes(*self));
+        serial.send(&Self::to_le_bytes(*self))?;
         Ok(())
     }
     fn send(&self, serial: &Serial) -> Result<()> {
         loop {
-            serial.send(&Self::to_le_bytes(*self));
+            serial.send(&Self::to_le_bytes(*self))?;
 
             // receive ack
             let mut loop_cnt = MAX_LOOPS;
@@ -36,8 +41,9 @@ impl Sender for Flit {
                     return Err(anyhow!("ack timeout"));
                 }
                 loop_cnt += 1;
+
                 let receive = serial.receive()?;
-                if let receive = Option::<[u8; 8]>::None {
+                if let Option::<[u8; 8]>::None = receive {
                     continue;
                 }
 
@@ -61,19 +67,20 @@ impl Sender for Flit {
             std::thread::sleep(std::time::Duration::from_millis(10));
             loop_cnt += 1;
             let receive = serial.receive()?;
-            if let receive = Option::<[u8; 8]>::None {
+            if let Option::<[u8; 8]>::None = receive {
                 continue;
             }
             flit = Flit::from_le_bytes(receive.unwrap());
             break;
         }
         let ack_flit = FlitMaker::make_ack_flit(flit);
-        serial.send(&Self::to_le_bytes(ack_flit));
+        serial.send(&Self::to_le_bytes(ack_flit))?;
         return Ok(flit);
     }
 }
+
 pub type Id = u16;
-pub type Coordinate = (u16, u16);
+pub type Coordinate = (i16, i16);
 
 #[derive(TryFromPrimitive, PartialEq, Debug)]
 #[repr(u8)]
@@ -85,9 +92,6 @@ pub enum FlitType {
     Tail = 3,
 }
 
-// 6bits
-type FlitId = u16;
-
 pub struct FlitMaker;
 
 impl FlitMaker {
@@ -98,13 +102,13 @@ impl FlitMaker {
         data
     }
     pub fn make_ack_flit(flit: Flit) -> Flit {
-        let (len_of_flit, flit_id, message, checksum) = FlitLoader::get_body_information(flit);
-        let (source_id, destination_id) = (source_id.to_le_bytes(), destination_id.to_le_bytes());
+        let (_, _, source_id, destination_id, packet_id) =
+            FlitLoader::get_head_information(flit).unwrap();
         Self::make_head_flit(0, Header::Ack, source_id, destination_id, packet_id)
     }
 
     pub fn make_head_flit(
-        len_of_flit: u8,
+        len_of_flit: FlitId,
         header: Header,
         source_id: Id,
         destination_id: Id,
@@ -131,7 +135,7 @@ impl FlitMaker {
 
         Flit::from_le_bytes(flitbyte)
     }
-    fn make_body_or_tail_flit(flittype: FlitType, flit_id: u8, message: [u8; 6]) -> Flit {
+    fn make_body_or_tail_flit(flittype: FlitType, flit_id: FlitId, message: [u8; 6]) -> Flit {
         let mut flitbyte = [0; 8];
         let flittype = flittype as u8;
         flitbyte[0] = Self::set_2_6bits(flittype, flit_id);
@@ -146,25 +150,26 @@ impl FlitMaker {
 
         Flit::from_le_bytes(flitbyte)
     }
-    pub fn make_body_flit(flit_id: u8, message: [u8; 6]) -> Flit {
+    pub fn make_body_flit(flit_id: FlitId, message: [u8; 6]) -> Flit {
         let flittype = FlitType::Body;
         Self::make_body_or_tail_flit(flittype, flit_id, message)
     }
-    pub fn make_tail_flit(flit_id: u8, message: [u8; 6]) -> Flit {
+    pub fn make_tail_flit(flit_id: FlitId, message: [u8; 6]) -> Flit {
         let flittype = FlitType::Tail;
         Self::make_body_or_tail_flit(flittype, flit_id, message)
     }
+    #[allow(dead_code)]
     pub fn make_nope_flit() -> Flit {
         0
     }
-    fn clear_flit_type(flit: &Flit) {
+    fn clear_flit_type(flit: &mut Flit) {
         *flit &= !(0b11 << 62);
     }
-    pub fn change_flit_type(flit: &Flit, flit_type: FlitType) {
+    pub fn change_flit_type(flit: &mut Flit, flit_type: FlitType) {
         Self::clear_flit_type(flit);
         Self::set_flit_type(flit, flit_type);
     }
-    fn set_flit_type(flit: &Flit, flit_type: FlitType) {
+    fn set_flit_type(flit: &mut Flit, flit_type: FlitType) {
         *flit |= (flit_type as u64) << 62;
     }
 
@@ -182,9 +187,11 @@ pub(crate) struct FlitLoader;
 
 impl FlitLoader {
     // utils
+    #[allow(dead_code)]
     fn get_u16_from_u64(val: u64, start: u8) -> u16 {
         TryFrom::try_from((val >> start) & u16::MAX as u64).unwrap()
     }
+    #[allow(dead_code)]
     fn get_u8_from_u64(val: u64, start: u8) -> u8 {
         TryFrom::try_from((val >> start) & u8::MAX as u64).unwrap()
     }
@@ -204,9 +211,9 @@ impl FlitLoader {
     }
     pub(crate) fn check_ack_flit(ack_flit: Flit, original_flit: Flit) -> Result<bool> {
         // pull from get_head_information
-        let (_, header, source_id, destination_id, packet_id) =
+        let (_, header, _source_id, destination_id, packet_id) =
             FlitLoader::get_head_information(ack_flit)?;
-        let (_, _, original_source_id, original_destination_id, original_packet_id) =
+        let (_, _, original_source_id, _original_destination_id, original_packet_id) =
             FlitLoader::get_head_information(original_flit)?;
         if header != Header::Ack {
             return Ok(false);
@@ -225,7 +232,7 @@ impl FlitLoader {
     }
 
     /// return (length_of_flit, header, source_id, destination_id, packet_id)
-    pub(crate) fn get_head_information(flit: Flit) -> Result<(u8, Header, Id, Id, u8)> {
+    pub(crate) fn get_head_information(flit: Flit) -> Result<(u8, Header, Id, Id, PacketId)> {
         let bytes: [u8; 8] = flit.to_le_bytes();
         let (flit_type, length_of_flit) = FlitLoader::get_flit_type_and_length(flit)?;
         if flit_type != FlitType::Head {
@@ -271,6 +278,7 @@ impl FlitLoader {
 
 #[cfg(test)]
 mod test {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
