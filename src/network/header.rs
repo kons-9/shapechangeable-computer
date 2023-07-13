@@ -1,18 +1,20 @@
 use num_enum::TryFromPrimitive;
 
 /// todo) now we use only data and ack header
+/// initial of a header that use only head flit is H
 #[derive(TryFromPrimitive, Eq, PartialEq, Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum Header {
     // BroadCast headers
-    GetNeighborId,
-    RequestConfirmedCoordinate,
+    HRequestConfirmedCoordinate,
 
     // for making localnet
     /// LocalnetId + NodeId
-    ShareNeighborCoordinate,
+    ShareNodeIdAndNeighborCoordinate,
     ConfirmCoordinate,
-    SendNodeId,
+
+    // for check connection
+    HCheckConnection,
 
     // for making tree
     SendParentId,
@@ -24,11 +26,10 @@ pub enum Header {
     Data,
 
     // for reply
-    Ack,
+    HAck,
 
     // for error
-    DataError,
-    EtcError,
+    Error,
 }
 
 impl Header {
@@ -36,16 +37,17 @@ impl Header {
     pub fn is_only_head(&self) -> bool {
         match self {
             Header::Data
-            | Header::SendNodeId
-            | Header::ShareNeighborCoordinate
             | Header::ConfirmCoordinate
             | Header::SendParentId
             | Header::ReceiveParentId
             | Header::SendChildId
             | Header::ReceiveChildId
-            | Header::DataError
-            | Header::EtcError => false,
-            Header::Ack | Header::GetNeighborId => true,
+            | Header::ShareNodeIdAndNeighborCoordinate
+            | Header::Error => false,
+            Header::HAck | Header::HRequestConfirmedCoordinate | Header::HCheckConnection => true,
         }
+    }
+    pub fn is_require_ack(&self) -> bool {
+        !self.is_only_head()
     }
 }

@@ -1,9 +1,10 @@
+use crate::id_utils::Util;
 use crate::serial::Serial;
 
-use super::flit::{Flit, FlitLoader, FlitMaker, FlitType, Id};
+use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
 use super::header::Header;
-use super::protocol::{DefaultProtocol, Protocol};
-use super::sender::Sender;
+use super::protocol::Protocol;
+use crate::id_utils::TypeAlias::{Coordinate, CoordinateComponent, Id};
 use anyhow::{anyhow, Result};
 
 type FromId = Id;
@@ -18,14 +19,14 @@ pub enum ToId {
 }
 
 impl ToId {
-    fn to_id(&self) -> Id {
+    pub fn to_id(&self) -> Id {
         // todo
         match self {
             ToId::Unicast(id) => *id,
             ToId::Broadcast => 0xFFFF,
         }
     }
-    fn from_id(id: Id) -> Self {
+    pub fn from_id(id: Id) -> Self {
         // todo
         match id {
             0xFFFF => ToId::Broadcast,
@@ -40,93 +41,109 @@ pub struct Packet {
     header: Header,
     from: FromId,
     to: ToId,
+    global_from: FromId,
+    global_to: ToId,
     messages: Vec<u8>,
     /// last 2 items represent checksum
-    checksum: u16,
+    checksum: u8,
     length_of_flit: usize,
 }
 
 impl Packet {
+    // connection
     pub fn send_broadcast(&self, serial: &Serial) -> Result<()> {
-        let flits = self.to_flits(Option::<&DefaultProtocol>::None);
+        let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn send(&self, serial: &Serial, protocol: &impl Protocol) -> Result<()> {
-        let flits = self.to_flits(Option::Some(protocol));
+    pub fn send(&self, serial: &Serial) -> Result<()> {
+        let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn receive(serial: &Serial) -> Result<Self> {
+    pub fn receive(serial: &Serial) -> Result<Option<Self>> {
         let mut flits = Vec::new();
-        let flit = Flit::receive(serial)?;
-        let (length_of_flit, _, _, _, _) = FlitLoader::get_head_information(flit)?;
+        let flit = match Flit::receive(serial)? {
+            Some(flit) => flit,
+            None => return Ok(None),
+        };
+
+        let (length_of_flit, _, _, _, _) = Flit::get_head_information(flit)?;
+
         flits.push(flit);
 
         for _ in 1..length_of_flit {
-            flits.push(Flit::receive(serial)?);
+            flits.push(Flit::wait_receive(serial)?);
         }
-        Self::from_flits(flits)
+        Ok(Some(Self::from_flits(flits)?))
     }
+
     pub fn new(
         packet_id: PacketId,
         header: Header,
+        global_from: FromId,
+        global_to: ToId,
         from: FromId,
         to: ToId,
         mut messages: Vec<u8>,
-    ) -> Result<Self> {
+    ) -> Self {
         let checksum = Self::calculate_checksum(&messages);
         // checksum is 2 bytes and packet id is 2 bytes
 
-        let length_of_flit = messages.len() + 4;
+        let length_of_flit = Self::calculate_length_of_flit(header, &messages);
 
         for _ in 0..6 {
             messages.push(0);
         }
 
-        Ok(Self {
+        Self {
             packet_id,
             header,
             from,
             to,
+            global_from,
+            global_to,
             messages,
             checksum,
             length_of_flit,
-        })
+        }
+    }
+    fn calculate_length_of_flit(header: Header, messages: &Vec<u8>) -> usize {
+        if header.is_only_head() {
+            return 1;
+        }
+        let mut length_of_flit = 2;
+        length_of_flit += (messages.len() + 5) / 6;
+        length_of_flit
     }
 
-    fn calculate_checksum(data: &Vec<u8>) -> u16 {
-        let mut sum: u16 = 0;
+    fn calculate_checksum(data: &Vec<u8>) -> u8 {
+        let mut sum: u8 = 0;
         for byte in data {
-            sum = sum.wrapping_add(*byte as u16);
+            sum = sum.wrapping_add(*byte);
         }
         sum
     }
-    pub fn change_from(&mut self, from: FromId) {
+    pub fn change_from_and_to(&mut self, from: FromId, to: ToId) {
         self.from = from;
+        self.to = to;
     }
 
-    pub fn to_flits(&self, routing: Option<&impl Protocol>) -> Vec<Flit> {
+    pub fn to_flits(&self) -> Vec<Flit> {
         // todo: should remake according to header, because some of them don't need tail_flit owing
         // to size of packet. it is more effecient.
         //
         //
-        let id = self.to;
-        let next_id = if id == ToId::Broadcast {
-            id.to_id()
-        } else {
-            routing.unwrap().get_next_node(self.from, id.to_id())
-        };
 
-        let mut flits = vec![FlitMaker::make_head_flit(
+        let mut flits = vec![Flit::make_head_flit(
             self.length_of_flit as u8,
             self.header,
             self.from,
-            next_id,
+            self.to.to_id(),
             self.packet_id,
         )];
 
@@ -139,24 +156,28 @@ impl Packet {
         // add packet id and checksum
 
         if self.messages.len() == 0 {
-            let tail_flit = FlitMaker::make_tail_flit(1, data);
+            let tail_flit = Flit::make_tail_flit(1, data);
             flits.push(tail_flit);
             return flits;
         }
         let flit_id = 1;
-        let body_flit = FlitMaker::make_body_flit(flit_id, data);
+        let body_flit = Flit::make_body_flit(flit_id, data);
         flits.push(body_flit);
 
         // add message
 
-        for i in 0..((self.length_of_flit - 4) / 6 + 1) {
+        for i in 0..self.length_of_flit - 2 {
             for j in 0..6 {
                 data[j] = self.messages[i * 6 + j]
             }
-            let body_flit = FlitMaker::make_body_flit(flit_id, data);
+            let body_flit = Flit::make_body_flit(flit_id, data);
             flits.push(body_flit);
         }
-        FlitMaker::change_flit_type(&mut flits[self.length_of_flit - 1], FlitType::Tail);
+        let last = flits.len() - 1;
+        Flit::change_flit_type(&mut flits[last], FlitType::Tail);
+        if self.length_of_flit != flits.len() % MAX_FLIT_LENGTH as usize {
+            panic!("length of flit is not correct");
+        }
 
         flits
     }
@@ -164,33 +185,48 @@ impl Packet {
         let mut data: [u8; 6] = [0; 6];
 
         data[0] = self.packet_id;
-        let checksum = self.checksum.to_le_bytes();
-        data[1] = checksum[0];
-        data[2] = checksum[1];
-        let ids = self.to.to_id().to_le_bytes();
-        data[3] = ids[0];
-        data[4] = ids[1];
+        data[1] = self.checksum;
+        let ids = self.global_to.to_id().to_le_bytes();
+        data[2] = ids[0];
+        data[3] = ids[1];
+        let ids = self.global_from.to_le_bytes();
+        data[4] = ids[0];
+        data[5] = ids[1];
         return data;
     }
-    fn check_checksum(data: &Vec<u8>) -> bool {
-        let mut sum: u16 = 0;
-        for i in 0..data.len() - 2 {
-            sum = sum.wrapping_add(data[i] as u16);
-        }
-        let checksum = u16::from_le_bytes([data[data.len() - 2], data[data.len() - 1]]);
-        sum == checksum
+    fn load_first_message(flit: Flit) -> (PacketId, u8, Id, Id) {
+        let data = flit.to_le_bytes();
+        let packet_id = data[0];
+        let checksum = data[1];
+        let to = Id::from_le_bytes([data[2], data[3]]);
+        let from = Id::from_le_bytes([data[4], data[5]]);
+        (packet_id, checksum, from, to)
     }
 
     pub fn from_flits(flits: Vec<Flit>) -> Result<Packet> {
-        let (length_of_flit, header, from, to, packet_id) =
-            FlitLoader::get_head_information(flits[0])?;
+        if flits.len() == 0 {
+            return Err(anyhow!("The length of flits is zero."));
+        }
+        let (length_of_flit, header, from, to, packet_id) = Flit::get_head_information(flits[0])?;
         let to = ToId::from_id(to);
         let length_of_flit = length_of_flit.into();
 
+        if header.is_only_head() {
+            return Ok(Self::new(packet_id, header, from, to, from, to, Vec::new()));
+        }
+
+        // general packet has at least 2 flits
+        if flits.len() < 2 {
+            return Err(anyhow!("The length of flits is not enough."));
+        }
+
+        let (packet_id, checksum, global_source, global_destination) =
+            Self::load_first_message(flits[1]);
+
         let mut data = Vec::new();
 
-        for i in 1..length_of_flit {
-            let (flittype, flit_id, message) = FlitLoader::get_body_or_tail_information(flits[i])?;
+        for i in 2..length_of_flit {
+            let (flittype, flit_id, message) = Flit::get_body_or_tail_information(flits[i])?;
             if flit_id as usize != i {
                 return Err(anyhow!("The flit id is not correct."));
             }
@@ -203,19 +239,118 @@ impl Packet {
                 data.push(j);
             }
         }
-        if Self::check_checksum(&data) {
-            Ok(Self::new(packet_id, header, from, to, data)?)
+        if Self::check_checksum(&data, checksum) {
+            Ok(Self::new(
+                packet_id,
+                header,
+                global_source,
+                ToId::from_id(global_destination),
+                from,
+                to,
+                data,
+            ))
         } else {
             Err(anyhow!("Checksum is not correct"))
         }
     }
+    fn check_checksum(data: &Vec<u8>, checksum: u8) -> bool {
+        let mut sum: u8 = 0;
+        for i in 0..data.len() {
+            sum = sum.wrapping_add(data[i]);
+        }
+        sum == checksum
+    }
 
+    // ///////////////////////////////
+    // Packet Maker
+    // ///////////////////////////////
+    // these function is for making/loading iregular packet.
+    // It is mainly used for initialization of network.
+    //
+    pub fn make_reply_for_request_confirmed_coordinate_packet(
+        source: Id,
+        destination: Id,
+        coordinate: Vec<&Coordinate>,
+    ) -> Result<Packet> {
+        // if the source node is confirmed, coordinate is only one, which is the coordiate of source node.
+        unimplemented!();
+    }
+    /// make broudcast packet
+    pub fn make_request_confirmed_coordinate_packet(source: Id) -> Packet {
+        // only head flit
+        let header = Header::HRequestConfirmedCoordinate;
+        let packet_id = 0;
+        let from = source;
+        let to = ToId::Broadcast;
+        let global_from = source;
+        let global_to = ToId::Broadcast;
+        let messages = Vec::new();
+        Self::new(
+            packet_id,
+            header,
+            from,
+            to,
+            global_from,
+            global_to,
+            messages,
+        )
+    }
+    /// make broudcast packet
+    pub fn make_get_neighborid_packet(source: Id, routing: &impl Protocol) -> Result<Packet> {
+        unimplemented!();
+    }
+
+    // ///////////////////////////////
+    // Packet Loader
+    // ///////////////////////////////
+    //
+    pub fn load_confirmed_coordinate_packet(&self, source_id: Id) -> Result<Vec<(Id, Coordinate)>> {
+        // load coordinate of node that is in the same localnet
+        // data is like this [ is_confirmed(8) | id(16) | x(16) | y(16) | id(16)...]
+        let messages = self.get_messages();
+        if (messages.len() - 1) % 6 != 0 {
+            panic!("length of message is not correct");
+        }
+        let confirmed = messages[0];
+        if confirmed != 0 && self.get_from() != source_id {
+            return Ok(Vec::new());
+        }
+
+        let mut coordinates = Vec::new();
+        for i in (1..messages.len()).step_by(6) {
+            let id = Id::from_le_bytes([messages[i], messages[i + 1]]);
+            let x = CoordinateComponent::from_le_bytes([messages[i + 2], messages[i + 3]]);
+            let y = CoordinateComponent::from_le_bytes([messages[i + 4], messages[i + 5]]);
+            coordinates.push((id, (x, y)));
+        }
+        if confirmed == 1 && coordinates.len() != 1 {
+            return Err(anyhow!(
+                "This node is confirmed but the number of coordinate is not 1."
+            ));
+        }
+        return Ok(coordinates);
+    }
+    // ///////////////////////////////
+    // Packet Utils
+    // ///////////////////////////////
+    pub fn is_same_localnet(&self, node_a: Id, node_b: Id) -> bool {
+        Util::get_localnet_id(node_a) == Util::get_localnet_id(node_b)
+    }
+
+    // ///////////////////////////////
     // getter
+    // ///////////////////////////////
     pub fn get_packet_id(&self) -> PacketId {
         self.packet_id
     }
     pub fn get_header(&self) -> Header {
         self.header
+    }
+    pub fn get_global_from(&self) -> Id {
+        self.global_from
+    }
+    pub fn get_global_to(&self) -> ToId {
+        self.global_to
     }
     pub fn get_from(&self) -> FromId {
         self.from
@@ -236,24 +371,10 @@ impl Packet {
         )
     }
 }
-/// PacketManager is a struct that makes/loads common packet.
-/// It is used for initialization of network.
-struct PacketManager;
-impl PacketMaker {
-    pub fn make_packet(
-        packet_id: PacketId,
-        header: Header,
-        from: FromId,
-        to: ToId,
-        messages: Vec<u8>,
-    ) -> Result<Packet> {
-        let packet = Packet::new(packet_id, header, from, to, messages)?;
-        Ok(packet)
-    }
-}
 
 #[cfg(test)]
 mod test {
+    #![allow(unused_imports)]
     use super::*;
     use crate::network::header::Header;
 
@@ -261,13 +382,13 @@ mod test {
     fn test() {
         let data: &str = "hello world";
         let packet_data = data.as_bytes().to_vec();
-        let packet = Packet::new(0, Header::Data, 0, ToId::Unicast(1), packet_data).unwrap();
-        let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
-        let trans_packet = Packet::from_flits(flits).unwrap();
-        assert_eq!(packet, trans_packet);
-        let trans_data = String::from_utf8(trans_packet.messages);
-        let trans_data = trans_data.unwrap();
-        let trans_data = trans_data.as_str();
-        assert_eq!(data, trans_data);
+        unimplemented!();
+        // let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
+        // let trans_packet = Packet::from_flits(flits).unwrap();
+        // assert_eq!(packet, trans_packet);
+        // let trans_data = String::from_utf8(trans_packet.messages);
+        // let trans_data = trans_data.unwrap();
+        // let trans_data = trans_data.as_str();
+        // assert_eq!(data, trans_data);
     }
 }

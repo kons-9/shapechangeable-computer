@@ -1,9 +1,7 @@
-use super::flit::{Coordinate, Id};
-
-use crate::{
-    efuse::{Efuse, LOCALNET_DOWNLEFT, LOCALNET_DOWNRIGHT, LOCALNET_UPLEFT, LOCALNET_UPRIGHT},
-    serial::Serial,
-};
+use crate::id_utils::Const::*;
+use crate::id_utils::TypeAlias::{Coordinate, Id};
+use crate::id_utils::Util;
+use crate::{efuse::Efuse, serial::Serial};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LocalNetworkLocation {
@@ -31,7 +29,7 @@ impl LocalNetworkLocation {
         }
     }
     pub fn from_id(id: Id) -> Self {
-        let id = (id & 0b110) as u32;
+        let id = (id & 0b110) as Id;
         match id {
             LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
             LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
@@ -41,7 +39,7 @@ impl LocalNetworkLocation {
         }
     }
 }
-impl From<LocalNetworkLocation> for u32 {
+impl From<LocalNetworkLocation> for Id {
     fn from(value: LocalNetworkLocation) -> Self {
         match value {
             LocalNetworkLocation::UpLeft => LOCALNET_UPLEFT,
@@ -51,8 +49,8 @@ impl From<LocalNetworkLocation> for u32 {
         }
     }
 }
-impl From<u32> for LocalNetworkLocation {
-    fn from(value: u32) -> Self {
+impl From<Id> for LocalNetworkLocation {
+    fn from(value: Id) -> Self {
         match value {
             LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
             LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
@@ -85,21 +83,21 @@ impl LocalNetwork {
     /// others are slaves.
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
-        let location: LocalNetworkLocation = Efuse::from(&efuse);
-        let localnet_id = efuse.get_localnet_id() as Id;
-        let mac_address = efuse.get_mac_address() as Id;
-        let is_root = efuse.is_root();
+        let mac_address = efuse.get_mac_address();
+        let location: LocalNetworkLocation = Util::get_localnet_location(mac_address);
+        let localnet_id = Util::get_localnet_id(mac_address);
+        let is_root = Util::is_root(mac_address);
 
         // localnet nodes' form is like this:
         // 0x00000000 [ localnet_id ] [ location ] [ is_root ]
         let (neighbor_ids, diagonal_id) = {
-            let raw_localnet = efuse.get_raw_localnet_id();
-            let raw_location = efuse.get_raw_localnet_location();
-            let raw_is_root = efuse.get_raw_root();
+            let raw_localnet = Util::get_raw_localnet_id(mac_address);
+            let raw_location = Util::get_raw_localnet_location(mac_address);
+            let raw_is_root = Util::get_raw_root(mac_address);
 
             let diagonal_location = location.diagonal_location();
-            let raw_diagonal_location: u32 = diagonal_location.into();
-            let diagonal_id = (raw_localnet | raw_diagonal_location | raw_is_root) as Id;
+            let raw_diagonal_location: Id = diagonal_location.into();
+            let diagonal_id = raw_localnet | raw_diagonal_location | raw_is_root;
 
             let mut ids = [0; 2];
             let mut index = 0;

@@ -50,7 +50,7 @@ impl<'d> Serial<'d> {
         let mut buffer = [0; 8];
         let byte = self.uart_driver.read(&mut buffer, 0)?;
         if byte != 8 {
-            // todo: maybe we should flush read buffer
+            self.flush_read()?;
             return Ok(None);
         }
         Ok(Some(buffer))
@@ -63,5 +63,10 @@ impl<'d> Serial<'d> {
     /// flush write buffer
     pub fn flush_write(&self) -> Result<()> {
         Ok(self.uart_driver.flush_write()?)
+    }
+    pub fn flush_all(&self) -> Result<()> {
+        self.flush_read()?;
+        self.flush_write()?;
+        Ok(())
     }
 }
