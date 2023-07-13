@@ -1,6 +1,6 @@
 mod flit;
 mod flitbuffer;
-mod header;
+pub mod header;
 pub mod localnet;
 mod packet;
 pub mod protocol;

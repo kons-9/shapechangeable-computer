@@ -43,7 +43,7 @@ fn main() -> Result<()> {
             }
         };
         // maybe serial output is only hello!!! or hellostd
-        serial.flush()?;
+        serial.flush_read()?;
         match data {
             Some(t) => {
                 println!("Received: {:?}", t);
