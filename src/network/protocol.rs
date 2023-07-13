@@ -1,4 +1,4 @@
-use super::flit::Id;
+use crate::id_utils::TypeAlias::Id;
 
 pub trait Protocol {
     fn is_in_route(&self, this_id: Id, from_id: Id, destination_id: Id) -> bool;

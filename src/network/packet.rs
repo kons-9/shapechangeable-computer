@@ -358,8 +358,8 @@ impl Packet {
     pub fn get_to(&self) -> ToId {
         self.to
     }
-    pub fn get_messages(self) -> Vec<u8> {
-        self.messages
+    pub fn get_messages(&self) -> &Vec<u8> {
+        &self.messages
     }
     pub fn get_all(self) -> (PacketId, Header, FromId, Id, Vec<u8>) {
         (
