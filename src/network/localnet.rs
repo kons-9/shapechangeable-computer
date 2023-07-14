@@ -125,13 +125,6 @@ impl LocalNetwork {
             mac_address,
         }
     }
-    /// send broadcast flit and receive coordinate of neighbor nodes.
-    pub fn is_ready(&self, serial: &Serial) -> bool {
-        unimplemented!();
-    }
-    pub fn get_coordinate(&self, _serial: &Serial) -> Coordinate {
-        unimplemented!();
-    }
     pub fn get_nodes_in_localnet(&self) -> Vec<Id> {
         let mut ids = Vec::new();
         for node in self.neighbor_ids.iter() {

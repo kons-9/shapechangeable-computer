@@ -41,6 +41,7 @@ esp32c3 = "0.15.0"
 num_enum = "0.6.1"
 st7735-lcd = "0.9.0"
 embedded-graphics = "0.8.0"
+embedded-hal = "0.2.7"
 
 [build-dependencies]
 embuild = "0.31.2"

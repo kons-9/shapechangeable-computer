@@ -66,4 +66,7 @@ pub mod Util {
     pub fn is_root(id: Id) -> bool {
         (id & ROOT_MASK) >> ROOT_SHIFT == ROOT
     }
+    pub fn is_same_localnet(id1: Id, id2: Id) -> bool {
+        get_localnet_id(id1) == get_localnet_id(id2)
+    }
 }

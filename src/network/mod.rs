@@ -9,6 +9,7 @@ use std::{thread::sleep, time::Duration};
 
 use crate::serial::Serial;
 use anyhow::Result;
+use log::info;
 
 use crate::id_utils::TypeAlias::{Coordinate, Id};
 use localnet::LocalNetwork;
@@ -76,7 +77,8 @@ where
         ))? {
             continue;
         }
-        let coordinate = localnet.get_coordinate(&serial);
+        // let coordinate = Self::get_coordinate(neighbor_confirmed);
+        let coordinate = (0, 0);
         Ok(NetworkNode {
             ip_address: localnet.get_mac_address(),
             neighbor_localnet_id_and_coordinate: Vec::new(),
@@ -95,11 +97,11 @@ where
     fn is_ready(
         serial: &Serial,
         neighbor_confirmed: &mut Vec<(Id, Coordinate)>,
-        source_id: Id,
+        node_id: Id,
         protocol: &T,
     ) -> Result<bool> {
         // send broadcast packet
-        let packet = Packet::make_request_confirmed_coordinate_packet(source_id);
+        let packet = Packet::make_request_confirmed_coordinate_packet(node_id);
         packet.send(serial)?;
 
         // delay
@@ -123,8 +125,7 @@ where
                 Header::ConfirmCoordinate => {
                     // if received packed source node is in the same localnet of this node,
                     // coordinate may be more than 1, but if not, it is 1. if not 1, it meajjjjjjjj
-                    let coordinates =
-                        received_packet.load_confirmed_coordinate_packet(source_id)?;
+                    let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
 
                     for coordinate in coordinates {
                         neighbor_confirmed.push(coordinate);
@@ -135,7 +136,7 @@ where
                     if neighbor_confirmed.len() != 0 {
                         let coordinate = neighbor_confirmed.iter().map(|(_, c)| c).collect();
                         let packet = Packet::make_reply_for_request_confirmed_coordinate_packet(
-                            source_id,
+                            node_id,
                             received_packet.get_from(),
                             coordinate,
                         )?;
@@ -145,7 +146,7 @@ where
                 _ => {}
             }
             serial.flush_read()?;
-            println!("unexpected packet");
+            info!("unexpected packet");
             loop_count = 0;
         }
     }
@@ -227,6 +228,15 @@ where
         }
         // it is my packet
         Ok(Some(packet))
+    }
+    pub fn get_coordinate(&self) -> Coordinate {
+        self.coordinate
+    }
+    pub fn get_neighbor_coordinate(&self) -> Vec<Coordinate> {
+        self.neighbor_localnet_id_and_coordinate
+            .iter()
+            .map(|(_, c)| *c)
+            .collect()
     }
     pub fn print_coordinate(&self) {
         println!("coordinate: {:?}", self.coordinate);

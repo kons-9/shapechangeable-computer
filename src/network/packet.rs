@@ -1,3 +1,5 @@
+use std::mem::{size_of, size_of_val};
+
 use crate::id_utils::Util;
 use crate::serial::Serial;
 
@@ -307,12 +309,19 @@ impl Packet {
     pub fn load_confirmed_coordinate_packet(&self, source_id: Id) -> Result<Vec<(Id, Coordinate)>> {
         // load coordinate of node that is in the same localnet
         // data is like this [ is_confirmed(8) | id(16) | x(16) | y(16) | id(16)...]
+
         let messages = self.get_messages();
-        if (messages.len() - 1) % 6 != 0 {
+        const unit_byte: usize =
+            (size_of::<CoordinateComponent>() * 2 + size_of::<Id>()) / size_of::<u8>();
+        // messages length is 1(is_confirmed) + 6 * n
+        if (messages.len() - 1) % unit_byte != 0 {
             panic!("length of message is not correct");
         }
         let confirmed = messages[0];
-        if confirmed != 0 && self.get_from() != source_id {
+        let is_confirmed = confirmed != 0;
+
+        // confirmed and source_id is in the same localnet
+        if is_confirmed && !Util::is_same_localnet(self.get_global_from(), source_id) {
             return Ok(Vec::new());
         }
 
@@ -323,7 +332,7 @@ impl Packet {
             let y = CoordinateComponent::from_le_bytes([messages[i + 4], messages[i + 5]]);
             coordinates.push((id, (x, y)));
         }
-        if confirmed == 1 && coordinates.len() != 1 {
+        if is_confirmed && coordinates.len() != 1 {
             return Err(anyhow!(
                 "This node is confirmed but the number of coordinate is not 1."
             ));
@@ -333,9 +342,7 @@ impl Packet {
     // ///////////////////////////////
     // Packet Utils
     // ///////////////////////////////
-    pub fn is_same_localnet(&self, node_a: Id, node_b: Id) -> bool {
-        Util::get_localnet_id(node_a) == Util::get_localnet_id(node_b)
-    }
+    //
 
     // ///////////////////////////////
     // getter

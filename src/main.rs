@@ -1,9 +1,9 @@
 use anyhow::Result;
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::prelude::*;
-use network::NetworkNode;
 use std::{thread::sleep, time::Duration};
 use std_display::display::Display;
-use std_display::network::protocol::{DefaultProtocol, Protocol};
+use std_display::network::protocol::DefaultProtocol;
 use std_display::network::NetworkNode; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 use std_display::serial;
 
@@ -17,46 +17,50 @@ fn main() -> Result<()> {
     // todo : use interrupt
 
     // Peripherals
-    let periperal = Peripherals::take().expect("never fails");
+    let peripheral = Peripherals::take().expect("never fails");
 
-    let uart = periperal.uart1;
-    let tx = periperal.pins.gpio21;
-    let rx = periperal.pins.gpio20;
+    let uart = peripheral.uart1;
+    let tx = peripheral.pins.gpio21;
+    let rx = peripheral.pins.gpio20;
     let serial = serial::Serial::new(uart, tx, rx, 115200);
 
     let mut protocol: DefaultProtocol = DefaultProtocol::new();
-    let mut network = NetworkNode::new(serial);
-
-    if network.is_root() {
-        root_setup(&mut network)?;
-    } else {
-        slave_setup(&mut network)?;
-    }
+    let mut network = NetworkNode::new(serial, protocol);
 
     // set reciever interrupt
-    let mut display = Display::new(network.get_coordinate(), network.get_neighbor_coordinate());
+    let spi = peripheral.spi2;
+    let sclk = peripheral.pins.gpio8;
+    let dc = PinDriver::output(peripheral.pins.gpio4)?;
+    let sdo = peripheral.pins.gpio10;
+    let rst = PinDriver::output(peripheral.pins.gpio3)?;
+    let hertz = 30_000_000;
+
+    let mut display = Display::new(
+        spi,
+        sclk,
+        sdo,
+        dc,
+        rst,
+        hertz,
+        network.local_location,
+        network.get_coordinate(),
+        network.get_neighbor_coordinate(),
+    );
 
     // after network connected
     loop {
         // if there is no packet,
 
         let packet = {
-            let option_packet = network.get_packet(&protocol)?;
+            let option_packet: Option<Packet> = network.get_packet()?;
             if let None = option_packet {
                 sleep(Duration::from_millis(100));
                 continue;
             }
             option_packet.unwrap()
         };
+        let (image, width, point) = packet.get_image();
 
-        display.draw_image(packet.get_image());
+        display.draw_image(image, width, point);
     }
-}
-
-fn root_setup(_network: &mut NetworkNode) -> Result<()> {
-    Ok(())
-}
-
-fn slave_setup(network: &mut NetworkNode) -> Result<()> {
-    Ok(())
 }

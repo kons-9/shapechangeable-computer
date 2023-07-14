@@ -13,23 +13,24 @@ impl Efuse {
     pub fn new() -> Efuse {
         // let mut block3 = Vec::new();
         let mut block3 = [0; 8];
-        unsafe {
-            for i in 0..8 {
-                block3[i as usize] = esp_idf_sys::esp_efuse_read_reg(3, i);
-            }
+        for i in 0..8 {
+            block3[i as usize] = Self::read_reg(3, i);
         }
 
         Efuse { block3 }
     }
     pub fn write_root(&self) {
-        self.write(3, 7, ROOT as u32);
+        Self::write(3, 7, ROOT as u32);
     }
 
     pub fn write_localnet(&self, localnet: u32) {
-        self.write(3, 7, localnet);
+        Self::write(3, 7, localnet);
+    }
+    pub fn read_reg(block: u32, reg: u32) -> u32 {
+        unsafe { esp_idf_sys::esp_efuse_read_reg(block, reg) }
     }
 
-    fn write(&self, block: u32, reg: u32, data: u32) {
+    fn write(block: u32, reg: u32, data: u32) {
         unsafe {
             esp_idf_sys::esp_efuse_write_reg(block, reg, data);
         }
