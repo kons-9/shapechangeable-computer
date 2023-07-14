@@ -4,7 +4,7 @@
 
 ## test of hardware
 You can use example/\*.rs as test of hardware.  
-But be careful to use efuse-write function. it is not recoverable after you execute it.
+But be careful using efuse-write function. it is not recoverable after you execute it.(you can generate using generate.zsh)
 <!-- But you should not use efuse.rs before  -->
 
 # documents
