@@ -1,5 +1,4 @@
-use crate::id_utils::Const::*;
-use crate::id_utils::TypeAlias::*;
+use crate::id_utils::{type_alias::*, util_const::*};
 
 /// efuse contains localnet_id and root information
 pub struct Efuse {

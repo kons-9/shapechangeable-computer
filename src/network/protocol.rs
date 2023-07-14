@@ -1,4 +1,4 @@
-use crate::id_utils::TypeAlias::Id;
+use crate::id_utils::type_alias::Id;
 
 pub trait Protocol {
     fn is_in_route(&self, this_id: Id, from_id: Id, destination_id: Id) -> bool;

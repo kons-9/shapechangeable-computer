@@ -18,7 +18,7 @@ use st7735_lcd;
 use st7735_lcd::Orientation;
 use st7735_lcd::ST7735;
 
-use crate::id_utils::TypeAlias::Coordinate;
+use crate::id_utils::type_alias::Coordinate;
 use crate::network::localnet::LocalNetworkLocation;
 
 pub struct Display<'d, DC, RST>
@@ -63,8 +63,8 @@ where
         rst: RST,
         baudrate: u32,
         local_location: LocalNetworkLocation,
+        global_location: LocalNetworkLocation,
         coordinate: Coordinate,
-        localnetwork_coordinates: [Coordinate; 3],
     ) -> Display<'d, DC, RST>
     where
         S: SpiAnyPins,
@@ -88,8 +88,7 @@ where
         display.init(&mut FreeRtos).unwrap();
         display.clear(Rgb565::BLACK).unwrap();
 
-        let rotation =
-            Self::calucurate_rotation(local_location, coordinate, localnetwork_coordinates);
+        let rotation = Self::calucurate_rotation(local_location, global_location, coordinate);
         display
             .set_orientation(&rotation.rotation_to_orientation())
             .unwrap();
@@ -108,10 +107,10 @@ where
     pub fn set_rotation_by_coordinate(
         &mut self,
         local_location: LocalNetworkLocation,
+        global_location: LocalNetworkLocation,
         coordinate: Coordinate,
-        neighbor_coordinate: [Coordinate; 3],
     ) {
-        let rotation = Self::calucurate_rotation(local_location, coordinate, neighbor_coordinate);
+        let rotation = Self::calucurate_rotation(local_location, global_location, coordinate);
         self.direction = rotation;
         self.display
             .set_orientation(&self.direction.rotation_to_orientation())
@@ -130,8 +129,8 @@ where
     }
     fn calucurate_rotation(
         local_location: LocalNetworkLocation,
+        global_location: LocalNetworkLocation,
         coordinate: Coordinate,
-        localnetwork_coordinate: [Coordinate; 3],
     ) -> Rotation {
         // calculate global location
 

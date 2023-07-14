@@ -1,5 +1,5 @@
 // ID type is u16, so I use lower order 16 bits of u32
-pub mod Const {
+pub mod util_const {
     pub const ID_MASK: u32 = 0xFFFF;
     pub const ROOT_MASK: u16 = 0x0000_0001;
     pub const ROOT_SHIFT: u16 = 0;
@@ -16,15 +16,15 @@ pub mod Const {
     pub const LOCALNET_DOWNLEFT: u16 = 0x00000004;
     pub const LOCALNET_DOWNRIGHT: u16 = 0x00000006;
 }
-pub mod TypeAlias {
+pub mod type_alias {
     pub type Id = u16;
     pub type Coordinate = (i16, i16);
     pub type CoordinateComponent = i16;
 }
 
-pub mod Util {
-    use super::Const::*;
-    use super::TypeAlias::*;
+pub mod util {
+    use super::type_alias::*;
+    use super::util_const::*;
     use crate::network::localnet::LocalNetworkLocation;
     pub fn get_raw_localnet_id(id: Id) -> u16 {
         id & LOCALNET_ID_MASK

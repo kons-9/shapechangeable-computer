@@ -1,12 +1,12 @@
 use std::mem::{size_of, size_of_val};
 
-use crate::id_utils::Util;
+use crate::id_utils::util;
 use crate::serial::Serial;
 
 use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
 use super::header::Header;
 use super::protocol::Protocol;
-use crate::id_utils::TypeAlias::{Coordinate, CoordinateComponent, Id};
+use crate::id_utils::type_alias::{Coordinate, CoordinateComponent, Id};
 use anyhow::{anyhow, Result};
 
 type FromId = Id;
@@ -310,7 +310,7 @@ impl Packet {
         // load coordinate of node that is in the same localnet
         // data is like this [ is_confirmed(8) | id(16) | x(16) | y(16) | id(16)...]
 
-        let messages = self.get_messages();
+        let messages = self.get_ref_messages();
         const unit_byte: usize =
             (size_of::<CoordinateComponent>() * 2 + size_of::<Id>()) / size_of::<u8>();
         // messages length is 1(is_confirmed) + 6 * n
@@ -321,7 +321,7 @@ impl Packet {
         let is_confirmed = confirmed != 0;
 
         // confirmed and source_id is in the same localnet
-        if is_confirmed && !Util::is_same_localnet(self.get_global_from(), source_id) {
+        if is_confirmed && !util::is_same_localnet(self.get_global_from(), source_id) {
             return Ok(Vec::new());
         }
 
@@ -365,8 +365,11 @@ impl Packet {
     pub fn get_to(&self) -> ToId {
         self.to
     }
-    pub fn get_messages(&self) -> &Vec<u8> {
+    pub fn get_ref_messages(&self) -> &Vec<u8> {
         &self.messages
+    }
+    pub fn get_messages(self) -> Vec<u8> {
+        self.messages
     }
     pub fn get_all(self) -> (PacketId, Header, FromId, Id, Vec<u8>) {
         (

@@ -5,7 +5,7 @@ use std::{thread::sleep, time::Duration};
 use std_display::display::Display;
 use std_display::network::protocol::DefaultProtocol;
 use std_display::network::NetworkNode; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
-use std_display::serial;
+use std_display::{application, serial};
 
 fn main() -> Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let serial = serial::Serial::new(uart, tx, rx, 115200);
 
     let mut protocol: DefaultProtocol = DefaultProtocol::new();
-    let mut network = NetworkNode::new(serial, protocol);
+    let mut network = NetworkNode::new(serial, protocol)?;
 
     // set reciever interrupt
     let spi = peripheral.spi2;
@@ -42,25 +42,25 @@ fn main() -> Result<()> {
         dc,
         rst,
         hertz,
-        network.local_location,
+        network.get_local_location(),
+        network.get_global_location(),
         network.get_coordinate(),
-        network.get_neighbor_coordinate(),
     );
 
     // after network connected
     loop {
         // if there is no packet,
 
-        let packet = {
-            let option_packet: Option<Packet> = network.get_packet()?;
-            if let None = option_packet {
+        let messages = {
+            let option_messages: Option<Vec<u8>> = network.get_messages()?;
+            if let None = option_messages {
                 sleep(Duration::from_millis(100));
                 continue;
             }
-            option_packet.unwrap()
+            option_messages.unwrap()
         };
-        let (image, width, point) = packet.get_image();
+        let (image, width, point) = application::image::get_image(messages)?;
 
-        display.draw_image(image, width, point);
+        display.draw_image(&image, width, point);
     }
 }

@@ -1,3 +1,4 @@
+pub mod application;
 pub mod display;
 pub mod efuse;
 mod id_utils;

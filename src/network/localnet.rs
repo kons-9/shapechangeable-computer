@@ -1,7 +1,9 @@
-use crate::id_utils::Const::*;
-use crate::id_utils::TypeAlias::{Coordinate, Id};
-use crate::id_utils::Util;
-use crate::{efuse::Efuse, serial::Serial};
+use crate::efuse::Efuse;
+use crate::id_utils::{
+    type_alias::{Coordinate, Id},
+    util,
+    util_const::*,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LocalNetworkLocation {
@@ -84,16 +86,16 @@ impl LocalNetwork {
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
         let mac_address = efuse.get_mac_address();
-        let location: LocalNetworkLocation = Util::get_localnet_location(mac_address);
-        let localnet_id = Util::get_localnet_id(mac_address);
-        let is_root = Util::is_root(mac_address);
+        let location: LocalNetworkLocation = util::get_localnet_location(mac_address);
+        let localnet_id = util::get_localnet_id(mac_address);
+        let is_root = util::is_root(mac_address);
 
         // localnet nodes' form is like this:
         // 0x00000000 [ localnet_id ] [ location ] [ is_root ]
         let (neighbor_ids, diagonal_id) = {
-            let raw_localnet = Util::get_raw_localnet_id(mac_address);
-            let raw_location = Util::get_raw_localnet_location(mac_address);
-            let raw_is_root = Util::get_raw_root(mac_address);
+            let raw_localnet = util::get_raw_localnet_id(mac_address);
+            let raw_location = util::get_raw_localnet_location(mac_address);
+            let raw_is_root = util::get_raw_root(mac_address);
 
             let diagonal_location = location.diagonal_location();
             let raw_diagonal_location: Id = diagonal_location.into();

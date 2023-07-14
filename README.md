@@ -34,3 +34,4 @@ Network Protocol must implement networkProtocol trait.
 I put todo: in source file in detail. others below.
 * handle uart interruption
 * handle uart buffer overflow 
+* use flit buffer

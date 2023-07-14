@@ -3,7 +3,7 @@ use crate::serial::Serial;
 use super::header::Header;
 use super::packet::PacketId;
 // use super::packet::PacketId;
-use crate::id_utils::TypeAlias::{Coordinate, Id};
+use crate::id_utils::type_alias::Id;
 use anyhow::anyhow;
 use anyhow::Result;
 use num_enum::TryFromPrimitive;

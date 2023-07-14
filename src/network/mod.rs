@@ -11,7 +11,7 @@ use crate::serial::Serial;
 use anyhow::Result;
 use log::info;
 
-use crate::id_utils::TypeAlias::{Coordinate, Id};
+use crate::id_utils::type_alias::{Coordinate, Id};
 use localnet::LocalNetwork;
 use packet::Packet;
 use protocol::Protocol;
@@ -28,10 +28,8 @@ where
 {
     /// now, mac address of localnet is used as node_id (in short, ip address = mac address)
     ip_address: Id,
-    /// use vec because it has just 4 elements in most cases.
-    /// so I think hashmap is not needed
-    neighbor_localnet_id_and_coordinate: Vec<(Id, Coordinate)>,
     localnet: LocalNetwork,
+    global_location: LocalNetworkLocation,
     coordinate: Coordinate,
     serial: Serial<'d>,
     protocol: T,
@@ -49,17 +47,18 @@ where
         let neighbor_in_localnet: Vec<Id> = localnet.get_neighbor_ids().into();
 
         if localnet.is_root() {
-            let mut neighbor_localnet_id_and_coordinate: Vec<(Id, Coordinate)> = Vec::new();
+            let mut localnet_id_and_coordinate: Vec<(Id, Coordinate)> = Vec::new();
             for localnet_id in neighbor_in_localnet.iter() {
                 let location = LocalNetworkLocation::from_id(*localnet_id);
                 let coordinate = location.get_root_coordinate();
-                neighbor_localnet_id_and_coordinate.push((*localnet_id, coordinate));
+                localnet_id_and_coordinate.push((*localnet_id, coordinate));
             }
+            let global_location = unimplemented!();
             return Ok(NetworkNode {
                 ip_address: localnet.get_mac_address(),
-                neighbor_localnet_id_and_coordinate,
                 coordinate: localnet.root_coordinate(),
                 localnet,
+                global_location,
                 serial,
                 protocol,
 
@@ -77,12 +76,13 @@ where
         ))? {
             continue;
         }
-        // let coordinate = Self::get_coordinate(neighbor_confirmed);
-        let coordinate = (0, 0);
+        let coordinate = unimplemented!();
+        let global_location = unimplemented!();
+
         Ok(NetworkNode {
             ip_address: localnet.get_mac_address(),
-            neighbor_localnet_id_and_coordinate: Vec::new(),
             localnet,
+            global_location,
             coordinate,
             serial,
             protocol,
@@ -178,8 +178,14 @@ where
         self.packet_id += 1;
         Ok(packet)
     }
+    pub fn get_messages(&self) -> Result<Option<Vec<u8>>> {
+        match self.get_packet()? {
+            Some(packet) => Ok(Some(packet.get_messages())),
+            None => Ok(None),
+        }
+    }
 
-    pub fn get_packet(&self) -> Result<Option<Packet>> {
+    pub(crate) fn get_packet(&self) -> Result<Option<Packet>> {
         // whether there is data in buffer.
         let packet = match Packet::receive(&self.serial) {
             Ok(Some(packet)) => packet,
@@ -232,11 +238,11 @@ where
     pub fn get_coordinate(&self) -> Coordinate {
         self.coordinate
     }
-    pub fn get_neighbor_coordinate(&self) -> Vec<Coordinate> {
-        self.neighbor_localnet_id_and_coordinate
-            .iter()
-            .map(|(_, c)| *c)
-            .collect()
+    pub fn get_local_location(&self) -> LocalNetworkLocation {
+        self.localnet.get_location()
+    }
+    pub fn get_global_location(&self) -> LocalNetworkLocation {
+        self.global_location
     }
     pub fn print_coordinate(&self) {
         println!("coordinate: {:?}", self.coordinate);
