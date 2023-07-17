@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     let dc = PinDriver::output(peripheral.pins.gpio4)?;
     let sdo = peripheral.pins.gpio10;
     let rst = PinDriver::output(peripheral.pins.gpio3)?;
-    let hertz = 30_000_000;
+    let hertz = 30.MHz().into();
 
     let mut display = Display::new(
         spi,
