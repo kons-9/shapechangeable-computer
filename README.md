@@ -11,15 +11,15 @@ But be careful using efuse-write function. it is not recoverable after you execu
 ## Flit
 Flit consists of 64 bits. Flit type is only four types, basic three types, head, body and tail, and errgular one type, nope flit.
 Nope flit will used for timing adjustment.
-* HeadFlit : 
+### HeadFlit
 
 FlitType(2) | LengthOfFlit(6) | Header(8) | SourceId(16) | DestinationId(16) | PacketId(8) | Checksum(8)
 :--:|:--:|:--:|:--:|:--:|:--:|:--:
-* Body and TailFlit : 
+### Body and TailFlit
 
 FlitType(2) | FlitId(6) | Message(48) | Checksum(8)
 :--:|:--:|:--:|:--:
-* NopeFlit : 
+### NopeFlit
 
  FlitType(2) | (undefined)(62) 
 :--:|:--:
