@@ -17,12 +17,12 @@ FlitType(2) | LengthOfFlit(6) | Header(8) | SourceId(16) | DestinationId(16) | P
 :--:|:--:|:--:|:--:|:--:|:--:|:--:
 * Body and TailFlit : 
 
-:--:|:--:|:--:|:--:
 FlitType(2) | FlitId(6) | Message(48) | Checksum(8)
+:--:|:--:|:--:|:--:
 * NopeFlit : 
 
-:--:|:--:
  FlitType(2) | (undefined)(62) 
+:--:|:--:
 
 A header of flit(packet) that need only head flit begin with H.
 
