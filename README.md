@@ -100,6 +100,7 @@ Data form is like this:
 
 is confirmed(8) | id(16) | x(16) | y(16) | id(16) | ...
 :--:|:--:|:--:|:--:|:--:|:--:
+
 Node that received this packet is in the same node as local 
 Header is `ConfirmCoordinate`
 
