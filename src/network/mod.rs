@@ -7,7 +7,10 @@ pub mod protocol;
 
 use std::{thread::sleep, time::Duration};
 
-use crate::{id_utils::util::is_same_localnet, serial::Serial};
+use crate::{
+    id_utils::util::{add_x, add_y, calculate_l0_distance, is_same_localnet},
+    serial::Serial,
+};
 use anyhow::Result;
 use log::info;
 
@@ -76,8 +79,7 @@ where
         // not root, so need to connect other nodes(units).
         let mut neighbor_confirmed: Vec<(Id, Coordinate)> = Vec::new();
 
-        // todo
-        while !(Self::is_ready(&neighbor_confirmed))? {
+        while !Self::is_ready(&neighbor_confirmed, ip_address)? {
             // send broadcast packet
             Self::request_confirmed_coordinate(&serial, ip_address)?;
 
@@ -116,7 +118,10 @@ where
         }
 
         let (coordinate, global_location) =
-            Self::coordinate_and_global_location_from_neighbor_confirmed(&neighbor_confirmed);
+            Self::coordinate_and_global_location_from_neighbor_confirmed(
+                &neighbor_confirmed,
+                ip_address,
+            )?;
 
         // todo: Join global network
 
@@ -145,7 +150,6 @@ where
         match received_packet.get_header() {
             Header::ConfirmCoordinate => {
                 // if received packed source node is in the same localnet of this node,
-                // coordinate may be more than 1, but if not, it is 1. if not 1, it meajjjjjjjj
                 let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
 
                 for coordinate in coordinates {
@@ -155,11 +159,11 @@ where
             }
             Header::HRequestConfirmedCoordinate => {
                 if neighbor_confirmed.len() != 0 {
-                    let coordinate = neighbor_confirmed.iter().map(|(_, c)| c).collect();
                     let packet = Packet::make_reply_for_request_confirmed_coordinate_packet(
                         node_id,
-                        received_packet.get_from(),
-                        coordinate,
+                        received_packet.get_global_from(),
+                        &neighbor_confirmed,
+                        None,
                     )?;
                     packet.send(serial)?;
                 }
@@ -171,8 +175,90 @@ where
 
     fn coordinate_and_global_location_from_neighbor_confirmed(
         neighbor_confirmed: &Vec<(Id, Coordinate)>,
+        this_id: Id,
+    ) -> Result<(Coordinate, LocalNetworkLocation)> {
+        let (coordinate, id_cmp, coordinate_cmp) =
+            match Self::find_distance_1_neighbor(neighbor_confirmed) {
+                Some((_, coordinate, id_cmp, coordinate_cmp)) => {
+                    (coordinate, id_cmp, coordinate_cmp)
+                }
+                None => {
+                    return Err(anyhow::anyhow!("not found distance 1 neighbor"));
+                }
+            };
+        let location = LocalNetworkLocation::from_id(this_id);
+        let location_cmp = LocalNetworkLocation::from_id(id_cmp);
+        return Ok(
+            Self::get_global_coordinate_and_global_location_from_local_location(
+                location,
+                coordinate,
+                location_cmp,
+                coordinate_cmp,
+            ),
+        );
+    }
+    fn get_global_coordinate_and_global_location_from_local_location(
+        local_location: LocalNetworkLocation,
+        coordinate: Coordinate,
+        local_location_cmp: LocalNetworkLocation,
+        coordinate_cmp: Coordinate,
     ) -> (Coordinate, LocalNetworkLocation) {
-        unimplemented!()
+        let is_clockwise_location = if local_location.rotate_clockwise() == local_location_cmp {
+            true
+        } else if local_location.rotate_counterclockwise() == local_location_cmp {
+            false
+        } else {
+            unreachable!();
+        };
+        const X: bool = true;
+        const Y: bool = false;
+        let different_coordinate = if coordinate.0 != coordinate_cmp.0 {
+            X
+        } else if coordinate.1 != coordinate_cmp.1 {
+            Y
+        } else {
+            unreachable!();
+        };
+        let is_small_coordinate =
+            if coordinate.0 < coordinate_cmp.0 || coordinate.1 < coordinate_cmp.1 {
+                true
+            } else {
+                false
+            };
+        match (
+            is_clockwise_location,
+            different_coordinate,
+            is_small_coordinate,
+        ) {
+            (true, X, true) => (add_y(coordinate, -1), LocalNetworkLocation::UpLeft),
+            (true, X, false) => (add_y(coordinate, 1), LocalNetworkLocation::DownRight),
+            (true, Y, true) => (add_x(coordinate, 1), LocalNetworkLocation::DownLeft),
+            (true, Y, false) => (add_x(coordinate, -1), LocalNetworkLocation::UpRight),
+            (false, X, true) => (add_y(coordinate, -1), LocalNetworkLocation::UpRight),
+            (false, X, false) => (add_y(coordinate, 1), LocalNetworkLocation::DownLeft),
+            (false, Y, true) => (add_x(coordinate, -1), LocalNetworkLocation::DownRight),
+            (false, Y, false) => (add_x(coordinate, 1), LocalNetworkLocation::UpLeft),
+        }
+    }
+    fn find_distance_1_neighbor(
+        neighbor_confirmed: &Vec<(Id, Coordinate)>,
+    ) -> Option<(Id, Coordinate, Id, Coordinate)> {
+        for i in 0..neighbor_confirmed.len() {
+            let (id, coordinate) = neighbor_confirmed[i];
+            for j in i + 1..neighbor_confirmed.len() {
+                let (id_cmp, coordinate_cmp) = neighbor_confirmed[j];
+                // calculate distance between coordinate and coordinate_cmp
+                let distance = calculate_l0_distance(coordinate, coordinate_cmp);
+                if distance == 1 {
+                    return Some((id, coordinate, id_cmp, coordinate_cmp));
+                }
+            }
+        }
+        None
+    }
+    pub fn join_global_network(&mut self) {
+        // todo:
+        ()
     }
 
     /// check connection with other nodes that is not in the same local network.
@@ -200,8 +286,18 @@ where
     /// Firstly, send broadcast flit and receive coordinate of neighbor nodes.
     /// Secondly, periodically send flit to neighbor which is in localnet,
     /// and check whether it has received flit of coordinate from neighbor which is not in localnet.
-    fn is_ready(neighbor_confirmed: &Vec<(Id, Coordinate)>) -> Result<bool> {
-        unimplemented!()
+    fn is_ready(neighbor_confirmed: &Vec<(Id, Coordinate)>, this_id: Id) -> Result<bool> {
+        // abviously, not enough
+        if neighbor_confirmed.len() < 1 {
+            return Ok(false);
+        }
+        for (id, _) in neighbor_confirmed.iter() {
+            if *id == this_id || !is_same_localnet(*id, this_id) {
+                panic!("software bug: same id is exist in neighbor_confirmed");
+            }
+        }
+
+        Ok(Self::find_distance_1_neighbor(neighbor_confirmed).is_some())
     }
 
     pub fn is_root(&self) -> bool {

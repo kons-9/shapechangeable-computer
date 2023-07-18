@@ -4,6 +4,7 @@ pub mod util_const {
     pub const ROOT_MASK: u16 = 0x0000_0001;
     pub const ROOT_SHIFT: u16 = 0;
     pub const LOCALNET_LOCATION_MASK: u16 = 0b0000_0000_0000_0110;
+    #[allow(dead_code)]
     pub const LOCALNET_LOCATION_SHIFT: u16 = 1;
     pub const LOCALNET_ID_MASK: u16 = 0b1111_1111_1111_1000;
     pub const LOCALNET_ID_SHIFT: u16 = 3;
@@ -29,6 +30,7 @@ pub mod util {
     pub fn get_raw_localnet_id(id: Id) -> u16 {
         id & LOCALNET_ID_MASK
     }
+    #[allow(dead_code)]
     pub fn get_raw_mac_address(id: Id) -> u16 {
         id & MAC_ADDRESS_MASK
     }
@@ -68,5 +70,16 @@ pub mod util {
     }
     pub fn is_same_localnet(id1: Id, id2: Id) -> bool {
         get_localnet_id(id1) == get_localnet_id(id2)
+    }
+    pub fn calculate_l0_distance(coordinate1: Coordinate, coordinate2: Coordinate) -> u16 {
+        let (x1, y1) = coordinate1;
+        let (x2, y2) = coordinate2;
+        ((x1 - x2).abs() + (y1 - y2).abs()) as u16
+    }
+    pub fn add_x(coordinate: Coordinate, x: CoordinateComponent) -> Coordinate {
+        (coordinate.0 + x, coordinate.1)
+    }
+    pub fn add_y(coordinate: Coordinate, y: CoordinateComponent) -> Coordinate {
+        (coordinate.0, coordinate.1 + y)
     }
 }

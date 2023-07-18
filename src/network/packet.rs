@@ -1,11 +1,10 @@
-use std::mem::{size_of, size_of_val};
+use std::mem::size_of;
 
-use crate::id_utils::util;
+use crate::id_utils::util::{self, is_same_localnet};
 use crate::serial::Serial;
 
 use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
 use super::header::Header;
-use super::protocol::Protocol;
 use crate::id_utils::type_alias::{Coordinate, CoordinateComponent, Id};
 use anyhow::{anyhow, Result};
 
@@ -284,11 +283,87 @@ impl Packet {
     pub fn make_reply_for_request_confirmed_coordinate_packet(
         source: Id,
         destination: Id,
-        coordinate: Vec<&Coordinate>,
+        coordinate: &Vec<(Id, Coordinate)>,
+        this_coordinate: Option<Coordinate>,
     ) -> Result<Packet> {
         // if the source node is confirmed, coordinate is only one, which is the coordiate of source node.
-        let packet = Self::make_request_confirmed_coordinate_packet(source);
-        Ok(packet)
+        let header = Header::ConfirmCoordinate;
+        let packet_id = 0;
+        let from = source;
+        let to = ToId::Broadcast;
+        let global_from = source;
+        let global_to = ToId::Broadcast;
+        let mut messages = Vec::new();
+
+        if !is_same_localnet(source, destination) {
+            return Self::make_reply_for_request_confirmed_coordinate_packet_in_different_localnet(
+                source,
+                this_coordinate,
+            );
+        }
+        let is_confirmed = this_coordinate.is_some();
+        if is_confirmed {
+            messages.push(0b11111111);
+        } else {
+            messages.push(0);
+        }
+        for (_, i) in coordinate {
+            let id = source.to_le_bytes();
+            messages.push(id[0]);
+            messages.push(id[1]);
+            let x = i.0.to_le_bytes();
+            messages.push(x[0]);
+            messages.push(x[1]);
+            let y = i.1.to_le_bytes();
+            messages.push(y[0]);
+            messages.push(y[1]);
+        }
+        Ok(Self::new(
+            packet_id,
+            header,
+            from,
+            to,
+            global_from,
+            global_to,
+            messages,
+        ))
+    }
+    fn make_reply_for_request_confirmed_coordinate_packet_in_different_localnet(
+        source: Id,
+        this_coordinate: Option<Coordinate>,
+    ) -> Result<Packet> {
+        if this_coordinate.is_none() {
+            return Err(anyhow!("The coordinate is not correct."));
+        }
+        let this_coordinate = this_coordinate.unwrap();
+        let mut messages = Vec::new();
+        messages.push(0b11111111);
+        let id = source.to_le_bytes();
+        messages.push(id[0]);
+        messages.push(id[1]);
+        let x = this_coordinate.0.to_le_bytes();
+        messages.push(x[0]);
+        messages.push(x[1]);
+        let y = this_coordinate.1.to_le_bytes();
+        messages.push(y[0]);
+        messages.push(y[1]);
+
+        let header = Header::ConfirmCoordinate;
+        let packet_id = 0;
+        let from = source;
+        let to = ToId::Broadcast;
+        let global_from = source;
+        let global_to = ToId::Broadcast;
+
+        Ok(Self::new(
+            packet_id,
+            header,
+            from,
+            to,
+            global_from,
+            global_to,
+            messages,
+        ))
     }
     /// make broudcast packet
     pub fn make_request_confirmed_coordinate_packet(source: Id) -> Packet {
@@ -320,6 +395,7 @@ impl Packet {
         // data is like this [ is_confirmed(8) | id(16) | x(16) | y(16) | id(16)...]
 
         let messages = self.get_ref_messages();
+        // id size + x size + y size
         const UNIT_BYTE: usize =
             (size_of::<CoordinateComponent>() * 2 + size_of::<Id>()) / size_of::<u8>();
         // messages length is 1(is_confirmed section) + 6 * n
@@ -398,8 +474,8 @@ mod test {
 
     #[test]
     fn test() {
-        let data: &str = "hello world";
-        let packet_data = data.as_bytes().to_vec();
+        // let data: &str = "hello world";
+        // let packet_data = data.as_bytes().to_vec();
         // let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
         // let trans_packet = Packet::from_flits(flits).unwrap();
         // assert_eq!(packet, trans_packet);

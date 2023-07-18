@@ -40,6 +40,22 @@ impl LocalNetworkLocation {
             _ => panic!("Invalid localnet: localnet is less than 5, but {}", id),
         }
     }
+    pub fn rotate_clockwise(&self) -> Self {
+        match self {
+            LocalNetworkLocation::UpLeft => LocalNetworkLocation::UpRight,
+            LocalNetworkLocation::UpRight => LocalNetworkLocation::DownRight,
+            LocalNetworkLocation::DownLeft => LocalNetworkLocation::UpLeft,
+            LocalNetworkLocation::DownRight => LocalNetworkLocation::DownLeft,
+        }
+    }
+    pub fn rotate_counterclockwise(&self) -> Self {
+        match self {
+            LocalNetworkLocation::UpLeft => LocalNetworkLocation::DownLeft,
+            LocalNetworkLocation::UpRight => LocalNetworkLocation::UpLeft,
+            LocalNetworkLocation::DownLeft => LocalNetworkLocation::DownRight,
+            LocalNetworkLocation::DownRight => LocalNetworkLocation::UpRight,
+        }
+    }
 }
 impl From<LocalNetworkLocation> for Id {
     fn from(value: LocalNetworkLocation) -> Self {

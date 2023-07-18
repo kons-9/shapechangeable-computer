@@ -24,8 +24,9 @@ fn main() -> Result<()> {
     let rx = peripheral.pins.gpio20;
     let serial = serial::Serial::new(uart, tx, rx, 115200);
 
-    let mut protocol: DefaultProtocol = DefaultProtocol::new();
+    let protocol: DefaultProtocol = DefaultProtocol::new();
     let mut network = NetworkNode::new(serial, protocol)?;
+    network.join_global_network();
 
     // set reciever interrupt
     let spi = peripheral.spi2;
@@ -49,8 +50,6 @@ fn main() -> Result<()> {
 
     // after network connected
     loop {
-        // if there is no packet,
-
         let messages = {
             let option_messages: Option<Vec<u8>> = network.get_messages()?;
             if let None = option_messages {
