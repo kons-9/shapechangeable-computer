@@ -10,6 +10,7 @@ use esp_idf_hal::uart::{Uart, UartConfig, UartDriver};
 /// todo: when a signal is received, push it to the original buffer by interrupt
 pub struct Serial<'d> {
     uart_driver: UartDriver<'d>,
+    enable: impl Peripheral<P = impl OutputPin> + 'd,
 }
 
 impl<'d> Serial<'d> {
@@ -17,6 +18,7 @@ impl<'d> Serial<'d> {
         uart: impl Peripheral<P = UART> + 'd,
         tx: impl Peripheral<P = impl OutputPin> + 'd,
         rx: impl Peripheral<P = impl InputPin> + 'd,
+        enable: impl Peripheral<P = impl OutputPin> + 'd,
         // cts: Option<impl Peripheral<P = impl InputPin> + 'd>,
         // rts: Option<impl Peripheral<P = impl OutputPin> + 'd>,
         hertz: u32,
@@ -32,7 +34,10 @@ impl<'d> Serial<'d> {
             &config,
         )
         .unwrap();
-        Serial { uart_driver }
+        Serial {
+            uart_driver,
+            enable,
+        }
     }
     /// send [u8; 8] to arduino
     pub fn send(&self, data: &[u8; 8]) -> Result<()> {

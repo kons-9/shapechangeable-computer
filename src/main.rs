@@ -22,7 +22,8 @@ fn main() -> Result<()> {
     let uart = peripheral.uart1;
     let tx = peripheral.pins.gpio21;
     let rx = peripheral.pins.gpio20;
-    let serial = serial::Serial::new(uart, tx, rx, 115200);
+    let enable = peripheral.pins.gpio5;
+    let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
 
     let protocol: DefaultProtocol = DefaultProtocol::new();
     let mut network = NetworkNode::new(serial, protocol)?;
