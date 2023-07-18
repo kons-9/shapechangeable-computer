@@ -101,7 +101,7 @@ impl LocalNetwork {
     /// others are slaves.
     pub fn new() -> LocalNetwork {
         let efuse = Efuse::new();
-        let mac_address = efuse.get_mac_address();
+        let mac_address = util::get_mac_address(efuse.get_efuse_value());
         let location: LocalNetworkLocation = util::get_localnet_location(mac_address);
         let localnet_id = util::get_localnet_id(mac_address);
         let is_root = util::is_root(mac_address);

@@ -1,26 +1,34 @@
 use anyhow::Result;
+use std::thread::sleep;
 use std::time::Duration;
-use std_display::efuse::{Efuse, ROOT};
+use std_display::efuse::Efuse;
+use std_display::id_utils::util;
+use std_display::id_utils::util_const::ROOT;
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    let efuse = Efuse::new();
+    let mut efuse = Efuse::new();
+    let mac_address = efuse.get_efuse_value();
+    let is_root = util::is_root(mac_address);
 
-    if efuse.is_root() {
-        println!("data3_7: {:x}", efuse.is_root());
+    if is_root {
+        println!("data3_7: {:x}", is_root as u32);
         eprintln!("Data had already written: Already ROOT");
     } else {
-        println!("data3_7: {:x}", efuse.is_root());
+        println!("data3_7: {:x}", is_root as u32);
         println!("Change ROOT: {:x}", ROOT);
         efuse.write_root();
-        println!("data3_7: {:x}", ROOT);
+        efuse.update();
+        let mac_address = efuse.get_efuse_value();
+        let is_root = util::is_root(mac_address);
+        println!("data3_7: {:x}", is_root as u32);
     }
 
     println!("Done");
 
     loop {
-        thread::sleep(Duration::from_secs(1));
+        sleep(Duration::from_secs(1));
     }
 }

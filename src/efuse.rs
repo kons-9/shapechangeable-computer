@@ -18,6 +18,11 @@ impl Efuse {
 
         Efuse { block3 }
     }
+    pub fn update(&mut self) {
+        for i in 0..8 {
+            self.block3[i as usize] = Self::read_reg(3, i);
+        }
+    }
     pub fn write_root(&self) {
         Self::write(3, 7, ROOT as u32);
     }
@@ -36,7 +41,7 @@ impl Efuse {
     }
 
     // raw value of efuse
-    pub fn get_mac_address(&self) -> Id {
+    pub fn get_efuse_value(&self) -> Id {
         (self.block3[7] & ID_MASK) as Id
     }
 
