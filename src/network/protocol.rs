@@ -1,8 +1,10 @@
 use crate::id_utils::type_alias::Id;
 
 pub trait Protocol {
-    fn is_in_route(&self, this_id: Id, from_id: Id, destination_id: Id) -> bool;
-    fn get_next_node(&self, this_id: Id, destination_id: Id) -> Id;
+    /// check whether this node is in route
+    fn is_in_route(&self, this: Id, global_source: Id, global_destination: Id) -> bool;
+    /// get next node
+    fn get_next_node(&self, this: Id, global_destination: Id) -> Id;
 }
 
 pub struct DefaultProtocol {
@@ -26,7 +28,7 @@ impl RoutingTable {
     }
 }
 impl Protocol for DefaultProtocol {
-    fn is_in_route(&self, this_id: Id, from_id: Id, destination_id: Id) -> bool {
+    fn is_in_route(&self, this_id: Id, source_id: Id, destination_id: Id) -> bool {
         unimplemented!()
     }
     fn get_next_node(&self, this_id: Id, destination_id: Id) -> Id {

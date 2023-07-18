@@ -9,9 +9,13 @@ But be careful using efuse-write function. it is not recoverable after you execu
 
 # documents
 ## Flit
-Flit consists of 64 bits. Flit type is only four types, basic three types, head, body and tail, and errgular one type, nope flit.
-Nope flit will used for timing adjustment.
+Flit consists of 64 bits. Flit type is only four types, basic three types, head, body and tail, and irregular one type, nope flit.
+A header of flit(packet) that need only head flit begin with H.
+An ack flit (, which header is HAck) is generally sent by the system when it receive a flit.
+Nope flit will used for timing adjustment.  
+
 ### HeadFlit
+HeadFlit id is 0.
 
 FlitType(2) | LengthOfFlit(6) | Header(8) | SourceId(16) | DestinationId(16) | PacketId(8) | Checksum(8)
 :--:|:--:|:--:|:--:|:--:|:--:|:--:
@@ -24,62 +28,90 @@ FlitType(2) | FlitId(6) | Message(48) | Checksum(8)
  FlitType(2) | (undefined)(62) 
 :--:|:--:
 
-A header of flit(packet) that need only head flit begin with H.
-
-HeadFlit id is 0.
 todo: flitId and length of flit is mod 6bit.
 
 ## Packet
 General packet, which means the packet have body and tail flit, has packetid, global sourceId, global destinationId and checksum like below.
-* [ packetId(8) | checksum(8) | globalDestinationId(16) | globalDestinationId(16) | data(...)]
+
+ packetId(8) | checksum(8) | globalDestinationId(16) | globalDestinationId(16) | data(...)
+:--:|:--:|:--:|:--:|:--:
+
 This means first body flit doesn't have any messages.
 
-## Network Protcol
-Network Protocol must implement networkProtocol trait.
+## Network Protocol
+Network Protocol must implement `network::protocol::Protocol` trait.
 
 ## About Each Process and detail of Packets
 This section explains processes and their packets.
 Note that explanations of these packets is data region of Packet.
 
 ### General case
-If you want to use this library with other application, you use this packets.
+If you want to use the library with other application, you use these packets.
 
 #### General ack
 ##### Explanation
+If you want to make ack packet in system such as TCP, you can use this packet.
 ##### Implementation
 Only head flit. 
-Header is HAck.
+Header is `GeneralAck`, not `HAck`, which is used for the system flit.
 
 #### General data
 ##### Explanation
 This library is not process this packet.
+So, you should reshape it into any form you want.
 ##### Implementation
+Header is `Data`.
 
 #### Error
 ##### Explanation
-Flit error is mainly processed by this library, but packet error isn't.
+Flit error is mainly processed by the library, but packet error isn't.
 So, you should handle with this packet.
+This error may occur in checksum process of packet. 
+So, you should resend packet, but it's optional.
 ##### Implementation
+Header is `Error`.
 
-### making local network
+### Making local network
+These packets are used for making local network by system.
+The process is this:
+1. the system sent check connection packet periodically, and then, receive check connection.
+2. If the system receive check connection packet, then sent request confirmed coordinate packet.
+3. If the system receive sufficient number of confirm coordinate packets, the system can analyse coordinate.
 
 #### Check connection
 ##### Explanation
+In this system, because unit of shapechangeable display is 4 nodes, these nodes connect each others. But, the unit should connect other units. This packet is used then firstly. 
 ##### Implementation
-Only head flit. Nothing special.
+Only head flit. This packet is broadcast but processed only in other local networks.
+Header is `HCheckConnection`.
+
 #### Request confirmed coordinate
 ##### Explanation
+Due to get global coordinate, you should access other nodes' coordinate.
 ##### Implementation
-Only head flit. Nothing special.
+Only head flit. This packet is sent by broadcast.
+Header is `HRequestConfirmedCoordinate`
+
 #### Reply for request confirmed coordinate
+##### Explanation
+
+##### Implementation
+Data form is like this:
+
+is confirmed(8) | id(16) | x(16) | y(16) | id(16) | ...
+:--:|:--:|:--:|:--:|:--:|:--:
+Node that received this packet is in the same node as local 
+Header is `ConfirmCoordinate`
 
 ### joining global network
+Todo
+These packets are used for making global network by system.
 
-#### request join network
+#### Request join network
 ##### Explanation
 ##### Implementation
 
-#### reply for request join network
+#### Reply for request join network
 ##### Explanation
 ##### Implementation
 
@@ -88,7 +120,7 @@ Only head flit. Nothing special.
 ** this data doesn't need to have a address that specify original source id, or this data is sent to just next node and this information is included in header.
 
 # todo
-I put todo: in source file in detail. others below.
-* handle uart interruption
-* handle uart buffer overflow 
-* use flit buffer
+I put `todo:` in source file in detail. Others are below.
+* Handle uart interruption
+* Handle uart buffer overflow 
+* Use flit buffer

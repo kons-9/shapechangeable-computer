@@ -275,7 +275,8 @@ impl Packet {
         coordinate: Vec<&Coordinate>,
     ) -> Result<Packet> {
         // if the source node is confirmed, coordinate is only one, which is the coordiate of source node.
-        unimplemented!();
+        let packet = Self::make_request_confirmed_coordinate_packet(source);
+        Ok(packet)
     }
     /// make broudcast packet
     pub fn make_request_confirmed_coordinate_packet(source: Id) -> Packet {
@@ -392,7 +393,6 @@ mod test {
     fn test() {
         let data: &str = "hello world";
         let packet_data = data.as_bytes().to_vec();
-        unimplemented!();
         // let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
         // let trans_packet = Packet::from_flits(flits).unwrap();
         // assert_eq!(packet, trans_packet);
