@@ -94,8 +94,11 @@ Header is `HRequestConfirmedCoordinate`
 
 #### Reply for request confirmed coordinate
 ##### Explanation
+this packet is reply for request confirmed coordinate packet.
 
 ##### Implementation
+If the system receive this packet, system will check the global source address of packet. And if it is from a node which is in the same local network and is not confirmed, the packet has information of nodes which is next to the node. otherwise,  the packet is only used by confirmed node.
+
 Data form is like this:
 
 is confirmed(8) | id(16) | x(16) | y(16) | id(16) | ...
@@ -104,9 +107,8 @@ is confirmed(8) | id(16) | x(16) | y(16) | id(16) | ...
 Node that received this packet is in the same node as local 
 Header is `ConfirmCoordinate`
 
-### joining global network
-Todo
-These packets are used for making global network by system.
+### Joining global network
+Todo: These packets are used for making global network by system.
 
 #### Request join network
 ##### Explanation

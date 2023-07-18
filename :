@@ -269,18 +269,6 @@ impl Packet {
     // these function is for making/loading iregular packet.
     // It is mainly used for initialization of network.
     //
-    pub fn make_check_connection_packet(source: Id) -> Packet {
-        let packet = Self::new(
-            0,
-            Header::HCheckConnection,
-            source,
-            ToId::Broadcast,
-            source,
-            ToId::Broadcast,
-            Vec::new(),
-        );
-        packet
-    }
     pub fn make_reply_for_request_confirmed_coordinate_packet(
         source: Id,
         destination: Id,
@@ -326,7 +314,8 @@ impl Packet {
         if (messages.len() - 1) % UNIT_BYTE != 0 {
             panic!("length of message is not correct");
         }
-        let is_confirmed = messages[0] != 0;
+        let confirmed = messages[0];
+        let is_confirmed = confirmed != 0;
 
         // confirmed and source_id is in the same localnet
         if is_confirmed && !util::is_same_localnet(self.get_global_from(), source_id) {

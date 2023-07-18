@@ -7,7 +7,7 @@ pub mod protocol;
 
 use std::{thread::sleep, time::Duration};
 
-use crate::serial::Serial;
+use crate::{id_utils::util::is_same_localnet, serial::Serial};
 use anyhow::Result;
 use log::info;
 
@@ -53,7 +53,8 @@ where
                 let coordinate = location.get_root_coordinate();
                 localnet_id_and_coordinate.push((*localnet_id, coordinate));
             }
-            let global_location = unimplemented!();
+            // same as locallocation
+            let global_location = localnet.get_location();
             return Ok(NetworkNode {
                 ip_address: localnet.get_mac_address(),
                 coordinate: localnet.root_coordinate(),
@@ -65,90 +66,142 @@ where
                 packet_id: 0,
             });
         }
+        let ip_address = localnet.get_mac_address();
+
+        while Self::check_connection(&serial, ip_address)? {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+
+        // not root, so need to connect other nodes(units).
         let mut neighbor_confirmed: Vec<(Id, Coordinate)> = Vec::new();
 
         // todo
-        while !(Self::is_ready(
-            &serial,
-            &mut neighbor_confirmed,
-            localnet.get_mac_address(),
-            &protocol,
-        ))? {
-            continue;
+        while !(Self::is_ready(&neighbor_confirmed))? {
+            // send broadcast packet
+            Self::request_confirmed_coordinate(&serial, ip_address)?;
+
+            // delay
+            sleep(Duration::from_millis(100));
+
+            let mut loop_count = 0;
+            loop {
+                if loop_count > 100 {
+                    // time out
+                    return Err(anyhow::anyhow!("connection is not exist"));
+                }
+                let received_packet = match Packet::receive(&serial)? {
+                    Some(packet) => packet,
+                    None => {
+                        sleep(Duration::from_millis(10));
+                        loop_count += 1;
+                        continue;
+                    }
+                };
+                let is_valid = Self::process_received_packet_of_request(
+                    &serial,
+                    ip_address,
+                    received_packet,
+                    &mut neighbor_confirmed,
+                )?;
+
+                if !is_valid {
+                    serial.flush_read()?;
+                    info!("unexpected packet");
+                    loop_count += 1;
+                    continue;
+                }
+                break;
+            }
         }
-        let coordinate = unimplemented!();
-        let global_location = unimplemented!();
+
+        let (coordinate, global_location) =
+            Self::coordinate_and_global_location_from_neighbor_confirmed(&neighbor_confirmed);
+
+        // todo: Join global network
 
         Ok(NetworkNode {
-            ip_address: localnet.get_mac_address(),
+            ip_address,
             localnet,
             global_location,
             coordinate,
             serial,
             protocol,
 
-            packet_id: 0,
+            packet_id: 1,
         })
     }
+    fn request_confirmed_coordinate(serial: &Serial, node_id: Id) -> Result<()> {
+        let packet = Packet::make_request_confirmed_coordinate_packet(node_id);
+        packet.send(&serial)?;
+        Ok(())
+    }
+    fn process_received_packet_of_request(
+        serial: &Serial,
+        node_id: Id,
+        received_packet: Packet,
+        neighbor_confirmed: &mut Vec<(Id, Coordinate)>,
+    ) -> Result<bool> {
+        match received_packet.get_header() {
+            Header::ConfirmCoordinate => {
+                // if received packed source node is in the same localnet of this node,
+                // coordinate may be more than 1, but if not, it is 1. if not 1, it meajjjjjjjj
+                let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
+
+                for coordinate in coordinates {
+                    neighbor_confirmed.push(coordinate);
+                }
+                return Ok(true);
+            }
+            Header::HRequestConfirmedCoordinate => {
+                if neighbor_confirmed.len() != 0 {
+                    let coordinate = neighbor_confirmed.iter().map(|(_, c)| c).collect();
+                    let packet = Packet::make_reply_for_request_confirmed_coordinate_packet(
+                        node_id,
+                        received_packet.get_from(),
+                        coordinate,
+                    )?;
+                    packet.send(serial)?;
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn coordinate_and_global_location_from_neighbor_confirmed(
+        neighbor_confirmed: &Vec<(Id, Coordinate)>,
+    ) -> (Coordinate, LocalNetworkLocation) {
+        unimplemented!()
+    }
+
+    /// check connection with other nodes that is not in the same local network.
+    fn check_connection(serial: &Serial, node_id: Id) -> Result<bool> {
+        let packet = Packet::make_check_connection_packet(node_id);
+        packet.send(serial)?;
+        let received_packet = match Packet::receive(serial)? {
+            Some(packet) => packet,
+            None => return Ok(false),
+        };
+        match received_packet.get_header() {
+            Header::HCheckConnection => {
+                let source = received_packet.get_from();
+                if is_same_localnet(node_id, source) {
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(false),
+        }
+    }
+
     /// This function has two roles.
     /// Firstly, send broadcast flit and receive coordinate of neighbor nodes.
     /// Secondly, periodically send flit to neighbor which is in localnet,
     /// and check whether it has received flit of coordinate from neighbor which is not in localnet.
-    fn is_ready(
-        serial: &Serial,
-        neighbor_confirmed: &mut Vec<(Id, Coordinate)>,
-        node_id: Id,
-        protocol: &T,
-    ) -> Result<bool> {
-        // send broadcast packet
-        let packet = Packet::make_request_confirmed_coordinate_packet(node_id);
-        packet.send(serial)?;
-
-        // delay
-        sleep(Duration::from_millis(100));
-
-        let mut loop_count = 0;
-        loop {
-            if loop_count > 100 {
-                return Ok(false);
-            }
-            let received_packet = match Packet::receive(serial)? {
-                Some(packet) => packet,
-                None => {
-                    sleep(Duration::from_millis(10));
-                    loop_count += 1;
-                    continue;
-                }
-            };
-
-            match received_packet.get_header() {
-                Header::ConfirmCoordinate => {
-                    // if received packed source node is in the same localnet of this node,
-                    // coordinate may be more than 1, but if not, it is 1. if not 1, it meajjjjjjjj
-                    let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
-
-                    for coordinate in coordinates {
-                        neighbor_confirmed.push(coordinate);
-                    }
-                    return Ok(neighbor_confirmed.len() > 1);
-                }
-                Header::HRequestConfirmedCoordinate => {
-                    if neighbor_confirmed.len() != 0 {
-                        let coordinate = neighbor_confirmed.iter().map(|(_, c)| c).collect();
-                        let packet = Packet::make_reply_for_request_confirmed_coordinate_packet(
-                            node_id,
-                            received_packet.get_from(),
-                            coordinate,
-                        )?;
-                        packet.send(serial)?;
-                    }
-                }
-                _ => {}
-            }
-            serial.flush_read()?;
-            info!("unexpected packet");
-            loop_count = 0;
-        }
+    fn is_ready(neighbor_confirmed: &Vec<(Id, Coordinate)>) -> Result<bool> {
+        unimplemented!()
     }
 
     pub fn is_root(&self) -> bool {
