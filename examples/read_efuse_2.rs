@@ -1,6 +1,7 @@
 use anyhow::Result;
 use esp32c3::Peripherals;
 
+/// this example use esp32c3 crate, which is not used in this main lib.
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
     // Bind the log crate to the ESP Logging facilities

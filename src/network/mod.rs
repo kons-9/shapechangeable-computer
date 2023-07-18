@@ -2,7 +2,7 @@ mod flit;
 mod flitbuffer;
 pub mod header;
 pub mod localnet;
-mod packet;
+pub mod packet;
 pub mod protocol;
 
 use std::{thread::sleep, time::Duration};

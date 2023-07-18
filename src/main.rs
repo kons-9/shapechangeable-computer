@@ -26,6 +26,7 @@ fn main() -> Result<()> {
 
     let protocol: DefaultProtocol = DefaultProtocol::new();
     let mut network = NetworkNode::new(serial, protocol)?;
+    network.print_coordinate();
     network.join_global_network();
 
     // set reciever interrupt
