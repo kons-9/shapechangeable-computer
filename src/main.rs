@@ -1,5 +1,5 @@
 use anyhow::Result;
-use esp_idf_hal::gpio::PinDriver;
+use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
 use std::{thread::sleep, time::Duration};
 use std_display::display::Display;
@@ -23,6 +23,7 @@ fn main() -> Result<()> {
     let tx = peripheral.pins.gpio21;
     let rx = peripheral.pins.gpio20;
     let enable = peripheral.pins.gpio5;
+    let enable: AnyOutputPin = enable.into();
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
 
     let protocol: DefaultProtocol = DefaultProtocol::new();

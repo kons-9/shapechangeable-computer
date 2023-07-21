@@ -7,6 +7,7 @@ use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
 use super::header::Header;
 use crate::id_utils::type_alias::{Coordinate, CoordinateComponent, Id};
 use anyhow::{anyhow, Result};
+use esp_idf_hal::gpio::OutputPin;
 
 type FromId = Id;
 pub type PacketId = u8;
@@ -52,21 +53,21 @@ pub struct Packet {
 
 impl Packet {
     // connection
-    pub fn send_broadcast(&self, serial: &Serial) -> Result<()> {
+    pub fn send_broadcast(&self, serial: &mut Serial) -> Result<()> {
         let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn send(&self, serial: &Serial) -> Result<()> {
+    pub fn send(&self, serial: &mut Serial) -> Result<()> {
         let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn receive(serial: &Serial) -> Result<Option<Self>> {
+    pub fn receive(serial: &mut Serial) -> Result<Option<Self>> {
         let mut flits = Vec::new();
         let flit = match Flit::receive(serial)? {
             Some(flit) => flit,

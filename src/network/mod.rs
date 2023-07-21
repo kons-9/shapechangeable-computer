@@ -45,7 +45,7 @@ impl<'d, T> NetworkNode<'d, T>
 where
     T: Protocol,
 {
-    pub fn new(serial: Serial<'d>, protocol: T) -> Result<Self> {
+    pub fn new(mut serial: Serial<'d>, protocol: T) -> Result<Self> {
         let localnet = LocalNetwork::new();
         let neighbor_in_localnet: Vec<Id> = localnet.get_neighbor_ids().into();
 
@@ -71,7 +71,7 @@ where
         }
         let ip_address = localnet.get_mac_address();
 
-        while Self::check_connection(&serial, ip_address)? {
+        while Self::check_connection(&mut serial, ip_address)? {
             std::thread::sleep(Duration::from_millis(100));
             continue;
         }
@@ -81,7 +81,7 @@ where
 
         while !Self::is_ready(&neighbor_confirmed, ip_address)? {
             // send broadcast packet
-            Self::request_confirmed_coordinate(&serial, ip_address)?;
+            Self::request_confirmed_coordinate(&mut serial, ip_address)?;
 
             // delay
             sleep(Duration::from_millis(100));
@@ -92,7 +92,7 @@ where
                     // time out
                     return Err(anyhow::anyhow!("connection is not exist"));
                 }
-                let received_packet = match Packet::receive(&serial)? {
+                let received_packet = match Packet::receive(&mut serial)? {
                     Some(packet) => packet,
                     None => {
                         sleep(Duration::from_millis(10));
@@ -101,7 +101,7 @@ where
                     }
                 };
                 let is_valid = Self::process_received_packet_of_request(
-                    &serial,
+                    &mut serial,
                     ip_address,
                     received_packet,
                     &mut neighbor_confirmed,
@@ -136,13 +136,13 @@ where
             packet_id: 1,
         })
     }
-    fn request_confirmed_coordinate(serial: &Serial, node_id: Id) -> Result<()> {
+    fn request_confirmed_coordinate(serial: &mut Serial, node_id: Id) -> Result<()> {
         let packet = Packet::make_request_confirmed_coordinate_packet(node_id);
-        packet.send(&serial)?;
+        packet.send(serial)?;
         Ok(())
     }
     fn process_received_packet_of_request(
-        serial: &Serial,
+        serial: &mut Serial,
         node_id: Id,
         received_packet: Packet,
         neighbor_confirmed: &mut Vec<(Id, Coordinate)>,
@@ -262,7 +262,7 @@ where
     }
 
     /// check connection with other nodes that is not in the same local network.
-    fn check_connection(serial: &Serial, node_id: Id) -> Result<bool> {
+    fn check_connection(serial: &mut Serial, node_id: Id) -> Result<bool> {
         let packet = Packet::make_check_connection_packet(node_id);
         packet.send(serial)?;
         let received_packet = match Packet::receive(serial)? {
@@ -327,16 +327,16 @@ where
         self.packet_id += 1;
         Ok(packet)
     }
-    pub fn get_messages(&self) -> Result<Option<Vec<u8>>> {
+    pub fn get_messages(&mut self) -> Result<Option<Vec<u8>>> {
         match self.get_packet()? {
             Some(packet) => Ok(Some(packet.get_messages())),
             None => Ok(None),
         }
     }
 
-    pub(crate) fn get_packet(&self) -> Result<Option<Packet>> {
+    pub(crate) fn get_packet(&mut self) -> Result<Option<Packet>> {
         // whether there is data in buffer.
-        let packet = match Packet::receive(&self.serial) {
+        let packet = match Packet::receive(&mut self.serial) {
             Ok(Some(packet)) => packet,
             Ok(None) => {
                 // no data in buffer
@@ -374,7 +374,7 @@ where
                                     .get_next_node(self.ip_address, global_destination_id),
                             ),
                         );
-                        packet.send(&self.serial)?;
+                        packet.send(&mut self.serial)?;
                     }
 
                     return Ok(None);

@@ -1,18 +1,19 @@
 use std::{thread, time::Duration};
 
 use anyhow::Result;
-use esp_idf_hal::prelude::Peripherals;
+use esp_idf_hal::{gpio::AnyOutputPin, prelude::Peripherals};
 use std_display::serial::Serial;
 
 fn main() -> Result<()> {
-    let periperal = Peripherals::take().expect("never fails");
+    let peripheral = Peripherals::take().expect("never fails");
 
-    let uart = periperal.uart1;
-    let tx = periperal.pins.gpio21;
-    let rx = periperal.pins.gpio20;
+    let uart = peripheral.uart1;
+    let tx = peripheral.pins.gpio21;
+    let rx = peripheral.pins.gpio20;
+    let enable: AnyOutputPin = peripheral.pins.gpio5.into();
     let hertz = 115200;
 
-    let serial = Serial::new(uart, tx, rx, hertz);
+    let mut serial = Serial::new(uart, tx, rx, enable, hertz);
 
     loop {
         match serial.send(b"hello!!!") {

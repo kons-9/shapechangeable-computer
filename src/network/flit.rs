@@ -6,6 +6,7 @@ use super::packet::PacketId;
 use crate::id_utils::type_alias::Id;
 use anyhow::anyhow;
 use anyhow::Result;
+use esp_idf_hal::gpio::OutputPin;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::ops;
@@ -40,12 +41,12 @@ impl Flit {
     // Flit Sender
     // ////////////////////////////////
 
-    pub fn send_broadcast(&self, serial: &Serial) -> Result<()> {
+    pub fn send_broadcast(&self, serial: &mut Serial) -> Result<()> {
         // we don't need to receive ack
         serial.send(&self.to_le_bytes())?;
         Ok(())
     }
-    pub fn send(&self, serial: &Serial) -> Result<()> {
+    pub fn send(&self, serial: &mut Serial) -> Result<()> {
         if !self.get_header()?.is_require_ack() {
             serial.send(&self.to_le_bytes())?;
             return Ok(());
@@ -76,7 +77,7 @@ impl Flit {
         }
     }
 
-    pub fn wait_receive(serial: &Serial) -> Result<Self> {
+    pub fn wait_receive(serial: &mut Serial) -> Result<Self> {
         let mut loop_cnt = 0;
         let flit: Flit;
         loop {
@@ -100,7 +101,7 @@ impl Flit {
         return Ok(flit);
     }
 
-    pub fn receive(serial: &Serial) -> Result<Option<Self>> {
+    pub fn receive(serial: &mut Serial) -> Result<Option<Self>> {
         // receive ack
         let receive = serial.receive()?;
         if let Option::<[u8; 8]>::None = receive {
