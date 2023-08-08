@@ -40,6 +40,7 @@ rand = "0.8.5"
 esp32c3 = "0.15.0"
 num_enum = "0.6.1"
 st7735-lcd = "0.9.0"
+# st7735 = "0.1.0"
 embedded-graphics = "0.8.0"
 embedded-hal = "0.2.7"
 

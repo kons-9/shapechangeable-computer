@@ -62,9 +62,11 @@ fn main() -> Result<()> {
                 }
                 Some(_t) => {
                     println!("not mine");
+                    break;
                 }
                 None => {
                     println!("Packet doesn't have any data received");
+                    break;
                 }
             }
         }

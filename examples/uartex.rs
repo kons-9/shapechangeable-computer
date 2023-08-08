@@ -25,20 +25,24 @@ fn main() -> Result<()> {
                 println!("SendError: {:?}", e);
             }
         }
-        let data = match serial.receive() {
-            Ok(data) => data,
-            Err(e) => {
-                println!("ReceiveError: {:?}", e);
-                None
-            }
-        };
-        match data {
-            Some(t) => {
-                println!("Received: {:?}", t);
-                println!("Received: {:?}", String::from_utf8(t.to_vec()));
-            }
-            None => {
-                println!("No data received");
+        loop {
+            let data = match serial.receive() {
+                Ok(data) => data,
+                Err(e) => {
+                    println!("ReceiveError: {:?}", e);
+                    break;
+                    // None
+                }
+            };
+            match data {
+                Some(t) => {
+                    println!("Received: {:?}", t);
+                    println!("Received: {:?}", String::from_utf8(t.to_vec()));
+                }
+                None => {
+                    println!("No data received");
+                    break;
+                }
             }
         }
         thread::sleep(Duration::from_secs(1));

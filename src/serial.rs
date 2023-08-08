@@ -47,10 +47,10 @@ impl<'d> Serial<'d> {
     }
     /// send [u8; 8] to arduino
     pub fn send(&mut self, data: &[u8; 8]) -> Result<()> {
-        self.enable.set_high()?;
+        // self.enable.set_high()?;
         let length = self.uart_driver.write(data)?;
-        Self::wait_tx_done(self)?;
-        self.enable.set_low()?;
+        // Self::wait_tx_done(self)?;
+        // self.enable.set_low()?;
         if length != 8 {
             return Err(anyhow::anyhow!("uart write error"));
         }
