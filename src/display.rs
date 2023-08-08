@@ -18,6 +18,8 @@ use st7735_lcd;
 use st7735_lcd::Orientation;
 use st7735_lcd::ST7735;
 
+use crate::font::Font;
+use crate::font::Font57;
 use crate::id_utils::type_alias::Coordinate;
 use crate::network::localnet::LocalNetworkLocation;
 
@@ -87,16 +89,13 @@ where
 
         display.init(&mut FreeRtos).unwrap();
         display.clear(Rgb565::BLACK).unwrap();
-
-        let rotation = Self::calucurate_rotation(local_location, global_location, coordinate);
-        display
-            .set_orientation(&rotation.rotation_to_orientation())
-            .unwrap();
-
-        Display {
-            direction: rotation,
+        let mut ret = Display {
+            direction: Rotation::Zero,
             display,
-        }
+        };
+
+        ret.set_rotation_by_coordinate(local_location, global_location, coordinate);
+        ret
     }
 
     /// return: (rgb, inverted, width, height)
@@ -136,5 +135,27 @@ where
 
         // todo:
         Rotation::Zero
+    }
+
+    pub fn draw_char(&mut self, c: char, x: u16, y: u16, color: u16) {
+        let character = Font57::get_char(c);
+        let mask = 0x01;
+        for row in 0..7 {
+            for col in 0..5 {
+                let bit = character[col] & (mask << row);
+
+                if bit != 0 {
+                    self.display
+                        .set_pixel(x - (col as u16), y - (row as u16), color)
+                        .unwrap();
+                }
+            }
+        }
+    }
+    pub fn set_offset(&mut self, x: u16, y: u16) {
+        self.display.set_offset(x, y);
+    }
+    pub fn clear(&mut self, color: Rgb565) {
+        self.display.clear(color).unwrap()
     }
 }

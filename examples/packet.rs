@@ -40,6 +40,7 @@ fn main() -> Result<()> {
         }
 
         thread::sleep(Duration::from_secs(1));
+
         loop {
             let data = match Packet::receive(&mut serial) {
                 Ok(data) => data,
@@ -59,7 +60,7 @@ fn main() -> Result<()> {
                     let header = t.get_header();
                     println!("Received: {:?}", header);
                 }
-                Some(t) => {
+                Some(_t) => {
                     println!("not mine");
                 }
                 None => {
