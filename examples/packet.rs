@@ -28,6 +28,7 @@ fn main() -> Result<()> {
         ToId::Broadcast,
         vec![],
     );
+
     loop {
         match packet.send(&mut serial) {
             Ok(_) => {
@@ -37,22 +38,33 @@ fn main() -> Result<()> {
                 println!("SendError: {:?}", e);
             }
         }
+
         thread::sleep(Duration::from_secs(1));
-        let data = match Packet::receive(&mut serial) {
-            Ok(data) => data,
-            Err(e) => {
-                println!("ReceiveError: {:?}", e);
-                None
-            }
-        };
-        match data {
-            Some(t) => {
-                println!("Received: {:?}", t);
-                let header = t.get_header();
-                println!("Received: {:?}", header);
-            }
-            None => {
-                println!("No data received");
+        loop {
+            let data = match Packet::receive(&mut serial) {
+                Ok(data) => data,
+                Err(e) => {
+                    println!("ReceiveError: {:?}", e);
+                    break;
+                }
+            };
+            match data {
+                Some(t) if t.get_global_to() == ToId::Broadcast => {
+                    println!("Received: {:?}", t);
+                    let header = t.get_header();
+                    println!("Received: {:?}", header);
+                }
+                Some(t) if t.get_to() == ToId::Unicast(ip_address) => {
+                    println!("Received: {:?}", t);
+                    let header = t.get_header();
+                    println!("Received: {:?}", header);
+                }
+                Some(t) => {
+                    println!("not mine");
+                }
+                None => {
+                    println!("Packet doesn't have any data received");
+                }
             }
         }
     }
