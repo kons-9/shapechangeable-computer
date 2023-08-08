@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         sdo,
         dc,
         rst,
-        115200,
+        30_000_000,
         // for rotation
         LocalNetworkLocation::UpLeft,
         LocalNetworkLocation::UpLeft,
@@ -39,17 +39,23 @@ fn main() -> Result<()> {
 
     esp_idf_hal::delay::Delay::delay_ms(1000);
     let width = 86;
-    let data = include_bytes!("../asset/ferris.raw");
-    display.draw_image(data, width, Some(Point::new(26, 8)));
+    // let data = include_bytes!("../asset/ferris.raw");
+    // display.draw_image(data, width, Some(Point::new(26, 8)));
 
     println!("lcd test have done.");
-    let mut cnt: u8 = 0;
+    let mut cnt = 0;
     loop {
         esp_idf_hal::delay::Delay::delay_ms(1000);
         display.clear(Rgb565::BLACK);
         esp_idf_hal::delay::Delay::delay_ms(1000);
-        display.draw_image(data, width, Some(Point::new(26, 8)));
-        display.draw_char((cnt % 10) as char, 0, 0, Colors::Red as u16);
+        // display.draw_image(data, width, Some(Point::new(26, 8)));
+        display.draw_char(
+            // char::from_digit(cnt % 10 as u32, 10).unwrap(),
+            '0',
+            26,
+            8,
+            Colors::Red as u16,
+        );
 
         cnt += 1;
     }
