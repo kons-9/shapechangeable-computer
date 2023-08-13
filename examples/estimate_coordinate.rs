@@ -1,10 +1,12 @@
-use embedded_graphics::image::Image;
-use embedded_graphics::image::ImageRaw;
-use embedded_graphics::image::ImageRawLE;
+use anyhow::Result;
+use embedded_graphics::mono_font::ascii::FONT_6X10;
+use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 
-use anyhow::Result;
+use embedded_graphics::prelude::*;
+use embedded_graphics::text::{Text, TextStyle};
+
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
 
@@ -15,16 +17,9 @@ use std_display::network::protocol::DefaultProtocol;
 use std_display::network::NetworkNode;
 use std_display::{application, serial};
 
-// If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
-
 fn main() -> Result<()> {
-    // It is necessary to call this function once. Otherwise some patches to the runtime
-    // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_sys::link_patches();
-    // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
-
-    // todo : use interrupt
 
     // Peripherals
     let peripheral = Peripherals::take().expect("never fails");
@@ -37,9 +32,8 @@ fn main() -> Result<()> {
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
 
     let protocol: DefaultProtocol = DefaultProtocol::new();
-    let mut network = NetworkNode::new(serial, protocol)?;
+    let network = NetworkNode::new(serial, protocol)?;
     network.print_coordinate();
-    network.join_global_network();
 
     // set reciever interrupt
     let spi = peripheral.spi2;
@@ -60,25 +54,18 @@ fn main() -> Result<()> {
         network.get_global_location(),
         network.get_coordinate(),
     );
+    let coordinate = network.get_coordinate();
+    let coordinate_str = format!("{} {}", coordinate.0, coordinate.1);
+
+    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+    let text = Text::new(&coordinate_str, Point::new(0, 0), text_style);
+
+    text.draw(&mut display)?;
+
+    println!("estimation is done");
 
     // after network connected
     loop {
-        let messages = {
-            let option_messages: Option<Vec<u8>> = network.get_messages()?;
-            if let None = option_messages {
-                sleep(Duration::from_millis(100));
-                continue;
-            }
-            option_messages.unwrap()
-        };
-        let (image, width, point) = application::image::get_image(messages)?;
-
-        let image: ImageRawLE<Rgb565> = ImageRaw::new(&image, width);
-        let image = if let Some(point) = point {
-            Image::new(&image, point)
-        } else {
-            Image::new(&image, Point::new(0, 0))
-        };
-        image.draw(&mut display).unwrap();
+        esp_idf_hal::delay::Delay::delay_ms(1000);
     }
 }

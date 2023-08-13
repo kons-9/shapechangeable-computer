@@ -1,9 +1,8 @@
 use anyhow::Result;
-use embedded_graphics::image::Image;
-use embedded_graphics::image::ImageRaw;
-use embedded_graphics::image::ImageRawLE;
+use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
+use embedded_graphics::text::Text;
 
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::Gpio0;
@@ -54,15 +53,16 @@ fn main() -> Result<()> {
 
     esp_idf_hal::delay::Delay::delay_ms(1000);
 
-    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.raw"), 86);
-    let image = Image::new(&image_raw, Point::new(26, 8));
-    image.draw(&mut display).unwrap();
+    let style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+    Text::new("Hello Rust!", Point::new(20, 30), style)
+        .draw(&mut display)
+        .unwrap();
+
+    // display.clear(Rgb565::RED).unwrap();
+    // display.set_offset(0, 25);
 
     println!("lcd test have done.");
     loop {
         esp_idf_hal::delay::Delay::delay_ms(1000);
-        display.clear(Rgb565::BLACK).unwrap();
-        esp_idf_hal::delay::Delay::delay_ms(1000);
-        image.draw(&mut display).unwrap();
     }
 }

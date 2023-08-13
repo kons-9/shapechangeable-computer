@@ -1,10 +1,9 @@
 use anyhow::Result;
-use embedded_graphics::image::Image;
-use embedded_graphics::image::ImageRaw;
-use embedded_graphics::image::ImageRawLE;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_hal::digital::v2::OutputPin;
+
+use embedded_graphics_core::draw_target::DrawTarget;
 
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::spi::SpiDeviceDriver;
@@ -18,8 +17,6 @@ use st7735_lcd;
 use st7735_lcd::Orientation;
 use st7735_lcd::ST7735;
 
-use crate::font::Font;
-use crate::font::Font57;
 use crate::id_utils::type_alias::Coordinate;
 use crate::network::localnet::LocalNetworkLocation;
 
@@ -116,16 +113,6 @@ where
             .unwrap();
     }
 
-    pub fn draw_image(&mut self, image: &[u8], width: u32, point: Option<Point>) {
-        // convert &[u8] to ImageRawLE<Rgb565>
-        let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(image, width);
-
-        let image = match point {
-            Some(point) => Image::new(&image_raw, point),
-            None => Image::new(&image_raw, Point::zero()),
-        };
-        image.draw(&mut self.display).unwrap();
-    }
     fn calucurate_rotation(
         local_location: LocalNetworkLocation,
         global_location: LocalNetworkLocation,
@@ -137,25 +124,47 @@ where
         Rotation::Zero
     }
 
-    pub fn draw_char(&mut self, c: char, x: u16, y: u16, color: u16) {
-        let character = Font57::get_char(c);
-        let mask = 0x01;
-        for row in 0..7 {
-            for col in 0..5 {
-                let bit = character[col] & (mask << row);
-
-                if bit != 0 {
-                    self.display
-                        .set_pixel(x - (col as u16), y - (row as u16), color)
-                        .unwrap();
-                }
-            }
-        }
-    }
     pub fn set_offset(&mut self, x: u16, y: u16) {
         self.display.set_offset(x, y);
     }
     pub fn clear(&mut self, color: Rgb565) {
         self.display.clear(color).unwrap()
+    }
+}
+
+impl<'d, DC, RST> DrawTarget for Display<'d, DC, RST>
+where
+    DC: OutputPin,
+    RST: OutputPin,
+{
+    type Color = Rgb565;
+    type Error = anyhow::Error;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        if let Err(x) = self.display.draw_iter(pixels) {
+            println!("draw_iter error: {:?}", x);
+            return Err(anyhow::Error::msg("draw_iter error"));
+        }
+        Ok(())
+    }
+    fn clear(&mut self, color: Self::Color) -> std::result::Result<(), Self::Error> {
+        if let Err(x) = self.display.clear(color) {
+            println!("clear error: {:?}", x);
+            return Err(anyhow::Error::msg("clear error"));
+        }
+        Ok(())
+    }
+}
+
+impl<'d, DC, RST> OriginDimensions for Display<'d, DC, RST>
+where
+    DC: OutputPin,
+    RST: OutputPin,
+{
+    fn size(&self) -> Size {
+        self.display.size()
     }
 }

@@ -42,6 +42,7 @@ num_enum = "0.6.1"
 st7735-lcd = "0.9.0"
 # st7735 = "0.1.0"
 embedded-graphics = "0.8.0"
+embedded-graphics-core = "0.4.0"
 embedded-hal = "0.2.7"
 
 [build-dependencies]
