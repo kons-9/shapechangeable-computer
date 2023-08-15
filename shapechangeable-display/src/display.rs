@@ -1,24 +1,23 @@
 use anyhow::Result;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
+use embedded_graphics_core::draw_target::DrawTarget;
 use embedded_hal::digital::v2::OutputPin;
 
-use embedded_graphics_core::draw_target::DrawTarget;
-
 use esp_idf_hal::delay::FreeRtos;
-use esp_idf_hal::spi::SpiDeviceDriver;
-use esp_idf_hal::spi::SpiDriver;
-
 use esp_idf_hal::gpio::Gpio0;
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::spi::SpiAnyPins;
+use esp_idf_hal::spi::SpiDeviceDriver;
+use esp_idf_hal::spi::SpiDriver;
 use esp_idf_hal::units::Hertz;
+
 use st7735_lcd;
 use st7735_lcd::Orientation;
 use st7735_lcd::ST7735;
 
-use crate::id_utils::type_alias::Coordinate;
-use crate::network::localnet::LocalNetworkLocation;
+use network_node::localnet::LocalNetworkLocation;
+use network_node::utils::type_alias::Coordinate;
 
 pub struct Display<'d, DC, RST>
 where

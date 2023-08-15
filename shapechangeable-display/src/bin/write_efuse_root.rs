@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::thread::sleep;
 use std::time::Duration;
 use std_display::efuse::Efuse;
-use std_display::id_utils::util;
-use std_display::id_utils::util_const::ROOT;
+use network_node::utils::util;
+use network_node::utils::util_const::ROOT;
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();

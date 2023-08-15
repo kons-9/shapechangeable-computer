@@ -2,7 +2,8 @@ use std::ffi::c_void;
 
 use esp_idf_sys::esp_err_t;
 
-use crate::id_utils::{type_alias::*, util_const::*};
+use network_node::system::SystemInfo;
+use network_node::utils::{type_alias::*, util_const::*};
 
 /// efuse contains localnet_id and root information
 pub struct Efuse {
@@ -52,24 +53,9 @@ impl Efuse {
     pub fn get_efuse_value(&self) -> Id {
         (self.block3[7] & ID_MASK) as Id
     }
-
-    // pub fn from(efuse: &Efuse) -> LocalNetworkLocation {
-    //     match efuse.get_raw_localnet_location() {
-    //         LOCALNET_UPLEFT => LocalNetworkLocation::UpLeft,
-    //         LOCALNET_UPRIGHT => LocalNetworkLocation::UpRight,
-    //         LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
-    //         LOCALNET_DOWNRIGHT => LocalNetworkLocation::DownRight,
-    //         _ => panic!(
-    //             "Invalid localnet: localnet is less than 5, but {},
-    //             raw_localnet_location: {},
-    //             mac_address: {}",
-    //             efuse.get_localnet_location(),
-    //             efuse.get_raw_localnet_location(),
-    //             efuse.get_mac_address()
-    //         ),
-    //     }
-    //     // efuse.efuse_to_localnet()
-    // }
-    //
-    // pub fn efuse_to_localnet(&self) -> LocalNetworkLocation {}
+}
+impl SystemInfo for Efuse {
+    fn get_system_info(&self) -> Id {
+        self.get_efuse_value()
+    }
 }

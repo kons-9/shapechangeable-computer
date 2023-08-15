@@ -1,5 +1,7 @@
-use crate::efuse::Efuse;
-use crate::id_utils::{
+// use crate::efuse::Efuse;
+
+use crate::system::SystemInfo;
+use crate::utils::{
     type_alias::{Coordinate, Id},
     util,
     util_const::*,
@@ -99,9 +101,8 @@ impl LocalNetwork {
     /// Basicly, localnetwork information is stored in efuse.
     /// master of localnet is upleft.
     /// others are slaves.
-    pub fn new() -> LocalNetwork {
-        let efuse = Efuse::new();
-        let mac_address = util::get_mac_address(efuse.get_efuse_value());
+    pub fn new(system_info: &impl SystemInfo) -> LocalNetwork {
+        let mac_address = util::get_mac_address(system_info.get_system_info());
         let location: LocalNetworkLocation = util::get_localnet_location(mac_address);
         let localnet_id = util::get_localnet_id(mac_address);
         let is_root = util::is_root(mac_address);
@@ -196,7 +197,7 @@ mod tests {
         block3[7] = 0x00000001;
         // let efuse = Efuse { block3 };
 
-        let localnet = LocalNetwork::new();
-        println!("{:?}", localnet);
+        // let localnet = LocalNetwork::new();
+        // println!("{:?}", localnet);
     }
 }

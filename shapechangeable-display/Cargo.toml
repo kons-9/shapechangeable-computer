@@ -44,6 +44,9 @@ st7735-lcd = "0.9.0"
 embedded-graphics = "0.8.0"
 embedded-graphics-core = "0.4.0"
 embedded-hal = "0.2.7"
+applications = {path = "../applications" }
+network-node = {path = "../network-node" }
+global-network = {path = "../global-network" }
 
 [build-dependencies]
 embuild = "0.31.2"

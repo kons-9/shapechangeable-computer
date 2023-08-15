@@ -17,6 +17,7 @@ pub mod util_const {
     pub const LOCALNET_DOWNLEFT: u16 = 0x00000004;
     pub const LOCALNET_DOWNRIGHT: u16 = 0x00000006;
 }
+
 pub mod type_alias {
     pub type Id = u16;
     pub type Coordinate = (i16, i16);
@@ -26,7 +27,7 @@ pub mod type_alias {
 pub mod util {
     use super::type_alias::*;
     use super::util_const::*;
-    use crate::network::localnet::LocalNetworkLocation;
+    use crate::localnet::LocalNetworkLocation;
     pub fn get_raw_localnet_id(id: Id) -> u16 {
         id & LOCALNET_ID_MASK
     }

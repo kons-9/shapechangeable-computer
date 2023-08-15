@@ -7,13 +7,17 @@ use embedded_graphics::prelude::*;
 use anyhow::Result;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
+use std_display::efuse::Efuse;
 
 use std::{thread::sleep, time::Duration};
 
+use applications::image::GetImageApp;
+use applications::App;
+use global_network::DefaultProtocol;
+use network_node::NetworkNode;
+
 use std_display::display::Display;
-use std_display::network::protocol::DefaultProtocol;
-use std_display::network::NetworkNode;
-use std_display::{application, serial};
+use std_display::serial;
 
 // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 
@@ -37,7 +41,8 @@ fn main() -> Result<()> {
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
 
     let protocol: DefaultProtocol = DefaultProtocol::new();
-    let mut network = NetworkNode::new(serial, protocol)?;
+    let efuse = Efuse::new();
+    let mut network = NetworkNode::new(serial, protocol, &efuse)?;
     network.print_coordinate();
     network.join_global_network();
 
@@ -61,6 +66,7 @@ fn main() -> Result<()> {
         network.get_coordinate(),
     );
 
+    let mut image_app = GetImageApp::new();
     // after network connected
     loop {
         let messages = {
@@ -71,7 +77,7 @@ fn main() -> Result<()> {
             }
             option_messages.unwrap()
         };
-        let (image, width, point) = application::image::get_image(messages)?;
+        let (image, width, point) = image_app.process_messages(messages)?;
 
         let image: ImageRawLE<Rgb565> = ImageRaw::new(&image, width);
         let image = if let Some(point) = point {

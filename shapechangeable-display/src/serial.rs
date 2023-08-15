@@ -6,6 +6,8 @@ use esp_idf_hal::prelude::*;
 use esp_idf_hal::uart::{Uart, UartConfig, UartDriver};
 use esp_idf_sys::{uart_wait_tx_done, ESP_OK};
 
+use network_node::serial::Serial as SerialTrait;
+
 /// rapper of UartDriver
 /// we only read and write 8 bytes because flit size is 8 bytes
 /// todo: when a signal is received, push it to the original buffer by interrupt
@@ -91,5 +93,19 @@ impl<'d> Serial<'d> {
         self.flush_read()?;
         self.flush_write()?;
         Ok(())
+    }
+}
+impl SerialTrait for Serial<'_> {
+    fn send(&mut self, data: &[u8; 8]) -> Result<()> {
+        self.send(data)
+    }
+    fn receive(&mut self) -> Result<Option<[u8; 8]>> {
+        self.receive()
+    }
+    fn flush_read(&mut self) -> Result<()> {
+        self.flush_read()
+    }
+    fn flush_write(&mut self) -> Result<()> {
+        self.flush_write()
     }
 }

@@ -1,9 +1,9 @@
 use anyhow::Result;
+use network_node::utils::util;
+use network_node::utils::util_const::TEMPLATE;
 use std::thread::sleep;
 use std::time::Duration;
 use std_display::efuse::Efuse;
-use std_display::id_utils::util_const::TEMPLATE;
-use std_display::id_utils::util;
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
