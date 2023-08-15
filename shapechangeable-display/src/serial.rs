@@ -58,15 +58,15 @@ impl<'d> Serial<'d> {
         }
         Ok(())
     }
-    #[inline]
-    fn wait_tx_done(&self) -> Result<()> {
-        let ret = unsafe { uart_wait_tx_done(self.uart_port, 1000) };
-        if ret == ESP_OK {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("uart wait tx done error"))
-        }
-    }
+    // #[inline]
+    // fn wait_tx_done(&self) -> Result<()> {
+    //     let ret = unsafe { uart_wait_tx_done(self.uart_port, 1000) };
+    //     if ret == ESP_OK {
+    //         Ok(())
+    //     } else {
+    //         Err(anyhow::anyhow!("uart wait tx done error"))
+    //     }
+    // }
     /// receive [u8; 8] from arduino
     pub fn receive(&self) -> Result<Option<[u8; 8]>> {
         // todo: arduino rx buffer may overflow, so we need to handle it by interrupt

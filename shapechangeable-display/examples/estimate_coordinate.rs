@@ -10,11 +10,12 @@ use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
 
+use global_network::DefaultProtocol;
 use log::info;
+use network_node::NetworkNode;
 use st7735_lcd::Orientation;
 use std_display::display::Display;
-use std_display::network::protocol::DefaultProtocol;
-use std_display::network::NetworkNode;
+use std_display::efuse::Efuse;
 use std_display::serial;
 
 fn main() -> Result<()> {
@@ -33,7 +34,9 @@ fn main() -> Result<()> {
     let protocol: DefaultProtocol = DefaultProtocol::new();
     info!("protocol initialized");
 
-    let network = NetworkNode::new(serial, protocol).expect("network initialization failed");
+    let efuse = Efuse::new();
+    let network =
+        NetworkNode::new(serial, protocol, &efuse).expect("network initialization failed");
     info!("network initialized");
 
     network.print_coordinate();

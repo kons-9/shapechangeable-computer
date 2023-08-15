@@ -120,6 +120,13 @@ Todo: These packets are used for making global network by system.
 ##### Explanation
 ##### Implementation
 
+## Mac address
+The software defines original mac address. This address is contained in block3 efuse register[7], which size is 32bit.
+You can use `write_efuse_generator.zsh`.
+
+unique node id(29) | local location(2) | is root(1)
+:--:|:--:|:--:
+
 # Note
 * a requirement of packet that has only headflit is that
 ** this data doesn't need to have a address that specify original source id, or this data is sent to just next node and this information is included in header.

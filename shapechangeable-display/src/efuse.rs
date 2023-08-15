@@ -28,6 +28,10 @@ impl Efuse {
             self.block3[i as usize] = Self::read_reg(3, i);
         }
     }
+    pub fn write_3_7(&self, data: u32) {
+        Self::write(3, 7, data);
+    }
+
     pub fn write_root(&self) {
         Self::write(3, 7, ROOT as u32);
     }
