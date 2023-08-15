@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+  "ota",
+  "shapechangeable-display",
+  "network-node",
+  "global-network",
+  "applications",
+]
