@@ -1,7 +1,6 @@
 pub mod application;
 pub mod display;
 pub mod efuse;
-pub mod font;
 pub mod id_utils;
 pub mod network;
 pub mod sd;

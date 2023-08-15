@@ -1,3 +1,7 @@
+use std::ffi::c_void;
+
+use esp_idf_sys::esp_err_t;
+
 use crate::id_utils::{type_alias::*, util_const::*};
 
 /// efuse contains localnet_id and root information
@@ -34,9 +38,13 @@ impl Efuse {
         unsafe { esp_idf_sys::esp_efuse_read_reg(block, reg) }
     }
 
-    fn write(block: u32, reg: u32, data: u32) {
+    fn write(block: u32, reg: u32, data: u32) -> esp_err_t {
+        unsafe { esp_idf_sys::esp_efuse_write_reg(block, reg, data) }
+    }
+
+    pub fn write_block(&self, blk: u32, src: &[u32], offset: usize, len: usize) -> esp_err_t {
         unsafe {
-            esp_idf_sys::esp_efuse_write_reg(block, reg, data);
+            esp_idf_sys::esp_efuse_write_block(blk, src.as_ptr() as *const c_void, offset, len)
         }
     }
 

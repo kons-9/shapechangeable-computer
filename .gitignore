@@ -1,6 +1,7 @@
-/.vscode
-/.embuild
-/target
-/Cargo.lock
+.vscode
+.embuild
+target
+Cargo.lock
 cfg.toml
+
 src/bin/write_efuse_localnet_*.rs

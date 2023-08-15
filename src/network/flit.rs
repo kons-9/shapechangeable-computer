@@ -51,6 +51,8 @@ impl Flit {
             serial.send(&self.to_le_bytes())?;
             return Ok(());
         }
+
+        // require ack flit
         loop {
             serial.send(&self.to_le_bytes())?;
 

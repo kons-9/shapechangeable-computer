@@ -12,7 +12,7 @@ use crate::{
     serial::Serial,
 };
 use anyhow::Result;
-use log::info;
+use log::{info};
 
 use crate::id_utils::type_alias::{Coordinate, Id};
 use localnet::LocalNetwork;
@@ -50,14 +50,20 @@ where
         let neighbor_in_localnet: Vec<Id> = localnet.get_neighbor_ids().into();
 
         if localnet.is_root() {
+            info!("root node");
             let mut localnet_id_and_coordinate: Vec<(Id, Coordinate)> = Vec::new();
             for localnet_id in neighbor_in_localnet.iter() {
                 let location = LocalNetworkLocation::from_id(*localnet_id);
                 let coordinate = location.get_root_coordinate();
                 localnet_id_and_coordinate.push((*localnet_id, coordinate));
             }
+            info!(
+                "localnet_id_and_coordinate: {:?}",
+                localnet_id_and_coordinate
+            );
             // same as locallocation
             let global_location = localnet.get_location();
+            info!("global_location: {:?}", global_location);
             return Ok(NetworkNode {
                 ip_address: localnet.get_mac_address(),
                 coordinate: localnet.root_coordinate(),
@@ -69,6 +75,8 @@ where
                 packet_id: 0,
             });
         }
+
+        info!("not root node");
         let ip_address = localnet.get_mac_address();
 
         while Self::check_connection(&mut serial, ip_address)? {

@@ -474,15 +474,24 @@ mod test {
     use crate::network::header::Header;
 
     #[test]
-    fn test() {
-        // let data: &str = "hello world";
-        // let packet_data = data.as_bytes().to_vec();
-        // let flits = packet.to_flits(Option::<&DefaultProtocol>::None);
-        // let trans_packet = Packet::from_flits(flits).unwrap();
-        // assert_eq!(packet, trans_packet);
-        // let trans_data = String::from_utf8(trans_packet.messages);
-        // let trans_data = trans_data.unwrap();
-        // let trans_data = trans_data.as_str();
-        // assert_eq!(data, trans_data);
+    fn test_broadcast() {
+        let data: &str = "hello world";
+        let packet_data = data.as_bytes().to_vec();
+        let packet = Packet::new(
+            0,
+            Header::Data,
+            0,
+            ToId::Broadcast,
+            0,
+            ToId::Broadcast,
+            packet_data,
+        );
+        let flits = packet.to_flits();
+        let trans_packet = Packet::from_flits(flits).unwrap();
+        assert_eq!(packet, trans_packet);
+        let trans_data = String::from_utf8(trans_packet.messages);
+        let trans_data = trans_data.unwrap();
+        let trans_data = trans_data.as_str();
+        assert_eq!(data, trans_data);
     }
 }

@@ -24,7 +24,7 @@ struct RoutingTable {
 }
 impl RoutingTable {
     fn new() -> Self {
-        unimplemented!()
+        Self {}
     }
 }
 impl Protocol for DefaultProtocol {
