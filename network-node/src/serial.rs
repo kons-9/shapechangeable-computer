@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-pub trait Serial {
+pub trait SerialTrait {
     fn send(&mut self, data: &[u8; 8]) -> Result<()>;
     fn receive(&mut self) -> Result<Option<[u8; 8]>>;
     fn flush_read(&mut self) -> Result<()>;

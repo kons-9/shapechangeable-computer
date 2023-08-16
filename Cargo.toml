@@ -7,3 +7,11 @@ members = [
   "global-network",
   "applications",
 ]
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true
+opt-level = "z"

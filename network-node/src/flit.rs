@@ -1,6 +1,6 @@
 use super::header::Header;
 use super::packet::PacketId;
-use super::serial::Serial;
+use super::serial::SerialTrait;
 use crate::utils::type_alias::Id;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -38,12 +38,12 @@ impl Flit {
     // Flit Sender
     // ////////////////////////////////
 
-    pub fn send_broadcast(&self, serial: &mut impl Serial) -> Result<()> {
+    pub fn send_broadcast(&self, serial: &mut impl SerialTrait) -> Result<()> {
         // we don't need to receive ack
         serial.send(&self.to_be_bytes())?;
         Ok(())
     }
-    pub fn send(&self, serial: &mut dyn Serial) -> Result<()> {
+    pub fn send(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         if !self.get_header()?.is_require_ack() {
             serial.send(&self.to_be_bytes())?;
             return Ok(());
@@ -76,7 +76,7 @@ impl Flit {
         }
     }
 
-    pub fn wait_receive(serial: &mut dyn Serial) -> Result<Self> {
+    pub fn wait_receive(serial: &mut dyn SerialTrait) -> Result<Self> {
         let mut loop_cnt = 0;
         let flit: Flit;
         loop {
@@ -100,7 +100,7 @@ impl Flit {
         return Ok(flit);
     }
 
-    pub fn receive(serial: &mut dyn Serial) -> Result<Option<Self>> {
+    pub fn receive(serial: &mut dyn SerialTrait) -> Result<Option<Self>> {
         // receive ack
         let receive = serial.receive()?;
         if let Option::<[u8; 8]>::None = receive {

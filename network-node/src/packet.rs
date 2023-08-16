@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use crate::serial::Serial;
+use crate::serial::SerialTrait;
 use crate::utils::util::{self, is_same_localnet};
 
 use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
@@ -52,21 +52,21 @@ pub struct Packet {
 
 impl Packet {
     // connection
-    pub fn send_broadcast(&self, serial: &mut dyn Serial) -> Result<()> {
+    pub fn send_broadcast(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn send(&self, serial: &mut dyn Serial) -> Result<()> {
+    pub fn send(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         let flits = self.to_flits();
         for flit in flits {
             flit.send(serial)?;
         }
         Ok(())
     }
-    pub fn receive(serial: &mut dyn Serial) -> Result<Option<Self>> {
+    pub fn receive(serial: &mut dyn SerialTrait) -> Result<Option<Self>> {
         let mut flits = Vec::new();
         let flit = match Flit::receive(serial)? {
             Some(flit) => flit,
@@ -215,6 +215,7 @@ impl Packet {
         let length_of_flit = length_of_flit.into();
 
         if header.is_only_head() {
+            // global_from and global_to is the same as from and to
             return Ok(Self::new(packet_id, header, from, to, from, to, Vec::new()));
         }
 
@@ -497,27 +498,59 @@ mod test {
             ToId::Broadcast,
             packet_data,
         );
-        println!("packet: {:?}", packet);
+        fn packet_test(packet: Packet, checksum: u8) {
+            println!("packet: {:?}", packet);
+            assert_eq!(packet.checksum, checksum);
 
-        assert_eq!(packet.checksum, 28);
+            let flits = packet.to_flits();
+            println!("checksum: {}", packet.checksum);
+            println!("flits: {:?}", flits);
+            let mut trans_packet = Packet::from_flits(flits).unwrap();
+            assert!(trans_packet.messages.len() >= packet.messages.len());
+            for i in 0..packet.messages.len() {
+                assert_eq!(
+                    trans_packet.messages[i], packet.messages[i],
+                    "packet: {:?}, trans_packet: {:?}",
+                    packet, trans_packet
+                );
+            }
+            for i in packet.messages.len()..trans_packet.messages.len() {
+                assert_eq!(0, trans_packet.messages[i])
+            }
+            trans_packet.messages = packet.messages.clone();
+            assert_eq!(packet, trans_packet);
+        }
+        packet_test(packet, 28);
 
-        let flits = packet.to_flits();
-        println!("checksum: {}", packet.checksum);
-        println!("flits: {:?}", flits);
-        println!("flit {:064b}", u64::from_be_bytes(flits[1].to_be_bytes()));
-        let mut trans_packet = Packet::from_flits(flits).unwrap();
-        for i in 0..packet.messages.len() {
-            assert_eq!(trans_packet.messages[i], packet.messages[i]);
-        }
-        for i in packet.messages.len()..trans_packet.messages.len() {
-            assert_eq!(0, trans_packet.messages[i])
-        }
-        trans_packet.messages = packet.messages.clone();
-        assert_eq!(packet, trans_packet);
+        // second, only head flit: in H{hoge} header, from and to is the same as global_from and global_to, and packet data is empty.
+        let packet_data = [].to_vec();
+        let packet = Packet::new(
+            5,
+            Header::HCheckConnection,
+            2,
+            ToId::Unicast(1),
+            2,
+            ToId::Unicast(1),
+            packet_data,
+        );
+        packet_test(packet, 0);
+
+        // third(meaning less but test)
+        let packet_data = [23, 92, 71].to_vec();
+        let packet = Packet::new(
+            0,
+            Header::ConfirmCoordinate,
+            2,
+            ToId::Broadcast,
+            4,
+            ToId::Unicast(4),
+            packet_data,
+        );
+        packet_test(packet, 186);
     }
 
     #[test]
-    fn test_make_first_flit() {
+    fn test_first_flit() {
         let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
         let packet = Packet::new(
             0,
@@ -529,16 +562,27 @@ mod test {
             packet_data,
         );
         let bytes = packet.make_first_message();
+        let flit = Flit::make_body_flit(1, bytes);
         println!("bytes: {:?}", bytes);
-        println!(
-            "flit: {:064b}",
-            u64::from_be_bytes(Flit::make_body_flit(1, bytes).to_be_bytes())
-        );
-        assert_eq!(bytes[0], 0b00000000);
-        assert_eq!(bytes[1], 28);
-        assert_eq!(bytes[2], 0xFF);
-        assert_eq!(bytes[3], 0xFF);
-        assert_eq!(bytes[4], 0x0);
-        assert_eq!(bytes[5], 0x0);
+        println!("flit: {:064b}", u64::from_be_bytes(flit.to_be_bytes()));
+        assert_eq!(bytes[0], 0b00000000, "packet id is not correct");
+        assert_eq!(bytes[1], 28, "checksum is not correct");
+        assert_eq!(bytes[2], 0xFF, "to id is not correct");
+        assert_eq!(bytes[3], 0xFF, "to id is not correct");
+        assert_eq!(bytes[4], 0x0, "from id is not correct");
+        assert_eq!(bytes[5], 0x0, "from id is not correct");
+
+        let (packet_id, checksum, from, to) = Packet::load_first_message(flit).unwrap();
+        assert_eq!(packet_id, 0, "packet id is not correct");
+        assert_eq!(checksum, 28, "checksum is not correct");
+        assert_eq!(from, 0, "from id is not correct");
+        assert_eq!(to, 0xFFFF, "to id is not correct");
+    }
+
+    #[test]
+    fn test_checksum() {
+        let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8];
+        let sum = Packet::calculate_checksum(&data);
+        assert_eq!(sum, 36);
     }
 }

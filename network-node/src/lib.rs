@@ -10,7 +10,7 @@ pub mod utils;
 use std::{thread::sleep, time::Duration};
 
 use crate::{
-    serial::Serial,
+    serial::SerialTrait,
     utils::util::{add_x, add_y, calculate_l0_distance, is_same_localnet},
 };
 use system::SystemInfo;
@@ -32,7 +32,7 @@ use self::{
 pub struct NetworkNode<T, S>
 where
     T: Protocol,
-    S: Serial,
+    S: SerialTrait,
 {
     /// now, mac address of localnet is used as node_id (in short, ip address = mac address)
     ip_address: Id,
@@ -49,7 +49,7 @@ where
 impl<T, S> NetworkNode<T, S>
 where
     T: Protocol,
-    S: Serial,
+    S: SerialTrait,
 {
     pub fn new(mut serial: S, protocol: T, system_info: &impl SystemInfo) -> Result<Self> {
         let localnet = LocalNetwork::new(system_info);

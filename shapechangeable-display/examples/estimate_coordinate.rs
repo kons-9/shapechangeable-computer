@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     info!("protocol initialized");
 
     let efuse = Efuse::new();
-    let network =
+    let mut network =
         NetworkNode::new(serial, protocol, &efuse).expect("network initialization failed");
     info!("network initialized");
 
@@ -91,7 +91,14 @@ fn main() -> Result<()> {
             messages.unwrap()
         };
 
-        match packet.get_header() {}
+        match packet.get_header() {
+            _ => {
+                todo!();
+                println!("Received: {:?}", packet);
+                let header = packet.get_header();
+                println!("Received: {:?}", header);
+            }
+        }
 
         esp_idf_hal::delay::Delay::delay_ms(1000);
     }

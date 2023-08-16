@@ -1,7 +1,6 @@
 use std::{thread, time::Duration};
 
 use anyhow::Result;
-use esp32c3::efuse;
 use esp_idf_sys::esp_efuse_desc_t;
 use std_display::efuse::Efuse;
 

@@ -2,6 +2,7 @@ use std::{thread, time::Duration};
 
 use anyhow::Result;
 use esp_idf_hal::{gpio::AnyOutputPin, prelude::Peripherals};
+use network_node::serial::SerialTrait;
 use std_display::serial::Serial;
 
 fn main() -> Result<()> {

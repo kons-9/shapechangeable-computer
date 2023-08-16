@@ -3,8 +3,9 @@ use std::{thread, time::Duration};
 use anyhow::Result;
 use esp_idf_hal::gpio::AnyOutputPin;
 use esp_idf_hal::prelude::Peripherals;
+use network_node::header::Header::HCheckConnection;
+use network_node::packet::{Packet, ToId};
 use std_display::efuse::Efuse;
-use std_display::network::packet::{self, Packet, ToId};
 use std_display::serial::Serial;
 
 fn main() -> Result<()> {
@@ -19,9 +20,9 @@ fn main() -> Result<()> {
     let mut serial = Serial::new(uart, tx, rx, enable, hertz);
 
     let ip_address = Efuse::new().get_efuse_value();
-    let packet = packet::Packet::new(
+    let packet = Packet::new(
         0,
-        std_display::network::header::Header::HCheckConnection,
+        HCheckConnection,
         ip_address,
         ToId::Broadcast,
         ip_address,

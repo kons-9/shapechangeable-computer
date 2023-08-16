@@ -6,7 +6,7 @@ use esp_idf_hal::prelude::*;
 use esp_idf_hal::uart::{Uart, UartConfig, UartDriver};
 use esp_idf_sys::{uart_wait_tx_done, ESP_OK};
 
-use network_node::serial::Serial as SerialTrait;
+use network_node::serial::SerialTrait;
 
 /// rapper of UartDriver
 /// we only read and write 8 bytes because flit size is 8 bytes
@@ -47,17 +47,6 @@ impl<'d> Serial<'d> {
             enable,
         }
     }
-    /// send [u8; 8] to arduino
-    pub fn send(&mut self, data: &[u8; 8]) -> Result<()> {
-        // self.enable.set_high()?;
-        let length = self.uart_driver.write(data)?;
-        // Self::wait_tx_done(self)?;
-        // self.enable.set_low()?;
-        if length != 8 {
-            return Err(anyhow::anyhow!("uart write error"));
-        }
-        Ok(())
-    }
     // #[inline]
     // fn wait_tx_done(&self) -> Result<()> {
     //     let ret = unsafe { uart_wait_tx_done(self.uart_port, 1000) };
@@ -67,8 +56,21 @@ impl<'d> Serial<'d> {
     //         Err(anyhow::anyhow!("uart wait tx done error"))
     //     }
     // }
+}
+impl SerialTrait for Serial<'_> {
+    /// send [u8; 8] to arduino
+    fn send(&mut self, data: &[u8; 8]) -> Result<()> {
+        // self.enable.set_high()?;
+        let length = self.uart_driver.write(data)?;
+        // Self::wait_tx_done(self)?;
+        // self.enable.set_low()?;
+        if length != 8 {
+            return Err(anyhow::anyhow!("uart write error"));
+        }
+        Ok(())
+    }
     /// receive [u8; 8] from arduino
-    pub fn receive(&self) -> Result<Option<[u8; 8]>> {
+    fn receive(&mut self) -> Result<Option<[u8; 8]>> {
         // todo: arduino rx buffer may overflow, so we need to handle it by interrupt
 
         // pull u64 from uart_driver
@@ -81,31 +83,11 @@ impl<'d> Serial<'d> {
         Ok(Some(buffer))
     }
     /// flush read buffer
-    pub fn flush_read(&self) -> Result<()> {
+    fn flush_read(&mut self) -> Result<()> {
         Ok(self.uart_driver.flush_read()?)
     }
-
     /// flush write buffer
-    pub fn flush_write(&self) -> Result<()> {
-        Ok(self.uart_driver.flush_write()?)
-    }
-    pub fn flush_all(&self) -> Result<()> {
-        self.flush_read()?;
-        self.flush_write()?;
-        Ok(())
-    }
-}
-impl SerialTrait for Serial<'_> {
-    fn send(&mut self, data: &[u8; 8]) -> Result<()> {
-        self.send(data)
-    }
-    fn receive(&mut self) -> Result<Option<[u8; 8]>> {
-        self.receive()
-    }
-    fn flush_read(&mut self) -> Result<()> {
-        self.flush_read()
-    }
     fn flush_write(&mut self) -> Result<()> {
-        self.flush_write()
+        Ok(self.uart_driver.flush_write()?)
     }
 }
