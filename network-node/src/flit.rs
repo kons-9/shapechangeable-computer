@@ -309,6 +309,7 @@ impl Flit {
         Flit(u64::from_le_bytes(bytes))
     }
 }
+
 impl ops::BitOrAssign<u64> for Flit {
     fn bitor_assign(&mut self, rhs: u64) {
         self.0 |= rhs;
@@ -338,7 +339,70 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_flit_type() {}
+    fn test_simple_head_flit() {
+        // make head flit
+        let flit = Flit::make_head_flit(0, Header::Data, 0, 1, 0);
+
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        debug_assert_eq!(flit_type, FlitType::Head);
+        assert_eq!(flit_type, FlitType::Head);
+        assert_eq!(length_of_flit, 0);
+
+        let (length_of_flit, header, source_id, destination_id, packet_id) =
+            Flit::get_head_information(flit).unwrap();
+        assert_eq!(length_of_flit, 0);
+        assert_eq!(header, Header::Data);
+        assert_eq!(source_id, 0);
+        assert_eq!(destination_id, 1);
+        assert_eq!(packet_id, 0);
+    }
+    #[test]
+    fn test_get_flit_type_and_length() {
+        let flit = Flit::make_head_flit(0, Header::Data, 0, 1, 0);
+
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        assert_eq!(flit_type, FlitType::Head);
+        assert_eq!(length_of_flit, 0);
+
+        let flit = Flit::make_body_flit(0, [0; 6]);
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        assert_eq!(flit_type, FlitType::Body);
+        assert_eq!(length_of_flit, 0);
+
+        let flit = Flit::make_tail_flit(0, [0; 6]);
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        assert_eq!(flit_type, FlitType::Tail);
+        assert_eq!(length_of_flit, 0);
+    }
+
+    #[test]
+    fn test_loader_utils() {
+        assert_eq!(
+            Flit::get_2bits_from_u64(0b001111, 3),
+            0b01,
+            "fail get_2bits"
+        );
+        assert_eq!(
+            Flit::get_2bits_from_u64(0b001111, 0),
+            0b11,
+            "fail get_2bits"
+        );
+        assert_eq!(
+            Flit::get_6bits_from_u64(0b111110011, 1),
+            0b111001,
+            "fail get_6bits"
+        );
+        assert_eq!(
+            Flit::get_u8_from_u64(0b010100101110011111, 3),
+            0b01110011,
+            "fail get_u8"
+        );
+        assert_eq!(
+            Flit::get_u16_from_u64(0b11111101111110110111, 2),
+            0b1111011111101101,
+            "fail get_u16"
+        );
+    }
 
     #[test]
     fn test_flit_loader_head() {}
