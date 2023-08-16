@@ -24,23 +24,7 @@ fn main() -> Result<()> {
 
     // Peripherals
     let peripheral = Peripherals::take().expect("never fails");
-
-    let uart = peripheral.uart1;
-    let tx = peripheral.pins.gpio21;
-    let rx = peripheral.pins.gpio20;
-    let enable: AnyOutputPin = peripheral.pins.gpio5.into();
-    let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
-
-    let protocol: DefaultProtocol = DefaultProtocol::new();
-    info!("protocol initialized");
-
-    let efuse = Efuse::new();
-    let mut network =
-        NetworkNode::new(serial, protocol, &efuse).expect("network initialization failed");
-    info!("network initialized");
-
-    network.print_coordinate();
-
+    // display initialization
     let spi = peripheral.spi2;
     let sclk = peripheral.pins.gpio8;
     let dc = PinDriver::output(peripheral.pins.gpio4).expect("failed to set dc pin");
@@ -48,32 +32,44 @@ fn main() -> Result<()> {
     let rst = PinDriver::output(peripheral.pins.gpio3).expect("failed to set rst pin");
     let hertz = 30.MHz().into();
 
-    let mut display = Display::new(
-        spi,
-        sclk,
-        sdo,
-        dc,
-        rst,
-        hertz,
+    let mut display = Display::new(spi, sclk, sdo, dc, rst, hertz);
+
+    display.print("display initialized", true);
+    display.print("begining serial initialization...", true);
+
+    // serial initialization
+    let uart = peripheral.uart1;
+    let tx = peripheral.pins.gpio21;
+    let rx = peripheral.pins.gpio20;
+    let enable: AnyOutputPin = peripheral.pins.gpio5.into();
+    let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
+
+    display.print("serial initialized", true);
+    display.print("begining network initialization...", true);
+
+    // network initialization
+    let protocol: DefaultProtocol = DefaultProtocol::new();
+    let efuse = Efuse::new();
+    let mut network =
+        NetworkNode::new(serial, protocol, &efuse).expect("network initialization failed");
+    network.print_coordinate();
+    display.set_rotation_by_coordinate(
         network.get_local_location(),
         network.get_global_location(),
         network.get_coordinate(),
     );
-    display.set_offset(6, 0);
 
-    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
-    let text = Text::new("display initialized", Point::new(0, 10), text_style);
-    text.draw(&mut display)?;
+    info!("network initialized");
+    display.print("network initialized", true);
 
     let coordinate = network.get_coordinate();
     let coordinate_str = format!("coordinate: ({}, {})", coordinate.0, coordinate.1);
-    let text = Text::new(&coordinate_str, Point::new(0, 20), text_style);
+    display.print(&coordinate_str, true);
+    display.print("estimation is done.", true);
+    display.print("waiting for network connection...", true);
 
-    text.draw(&mut display)?;
-    let text = Text::new("estimation is done", Point::new(0, 30), text_style);
-    text.draw(&mut display)?;
-
-    println!("estimation is done");
+    info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
+    info!("estimation is done");
 
     // after network connected
     loop {
@@ -94,9 +90,9 @@ fn main() -> Result<()> {
         match packet.get_header() {
             _ => {
                 todo!();
-                println!("Received: {:?}", packet);
+                println!("received packet: {:?}", packet);
+                display.print(format!("received packet: {:?}", packet).as_str(), true);
                 let header = packet.get_header();
-                println!("Received: {:?}", header);
             }
         }
 

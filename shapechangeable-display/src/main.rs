@@ -33,6 +33,17 @@ fn main() -> Result<()> {
     // Peripherals
     let peripheral = Peripherals::take().expect("never fails");
 
+    // set reciever interrupt
+    let spi = peripheral.spi2;
+    let sclk = peripheral.pins.gpio8;
+    let dc = PinDriver::output(peripheral.pins.gpio4)?;
+    let sdo = peripheral.pins.gpio10;
+    let rst = PinDriver::output(peripheral.pins.gpio3)?;
+    let hertz = 30.MHz().into();
+
+    let mut display = Display::new(spi, sclk, sdo, dc, rst, hertz);
+    display.print("display initialized", true);
+
     let uart = peripheral.uart1;
     let tx = peripheral.pins.gpio21;
     let rx = peripheral.pins.gpio20;
@@ -46,25 +57,13 @@ fn main() -> Result<()> {
     network.print_coordinate();
     network.join_global_network();
 
-    // set reciever interrupt
-    let spi = peripheral.spi2;
-    let sclk = peripheral.pins.gpio8;
-    let dc = PinDriver::output(peripheral.pins.gpio4)?;
-    let sdo = peripheral.pins.gpio10;
-    let rst = PinDriver::output(peripheral.pins.gpio3)?;
-    let hertz = 30.MHz().into();
-
-    let mut display = Display::new(
-        spi,
-        sclk,
-        sdo,
-        dc,
-        rst,
-        hertz,
+    display.print("network initialized", true);
+    display.set_rotation_by_coordinate(
         network.get_local_location(),
         network.get_global_location(),
         network.get_coordinate(),
     );
+    display.clear(Rgb565::BLACK)?;
 
     let mut image_app = GetImageApp::new();
     // after network connected

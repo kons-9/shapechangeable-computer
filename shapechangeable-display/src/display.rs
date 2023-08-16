@@ -1,6 +1,9 @@
 use anyhow::Result;
+use embedded_graphics::mono_font::ascii::FONT_6X10;
+use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
+use embedded_graphics::text::Text;
 use embedded_graphics_core::draw_target::DrawTarget;
 use embedded_hal::digital::v2::OutputPin;
 
@@ -27,6 +30,9 @@ where
 {
     direction: Rotation,
     display: ST7735<SpiDeviceDriver<'d, SpiDriver<'d>>, DC, RST>,
+    style: MonoTextStyle<'d, Rgb565>,
+    x: i32,
+    y: i32,
 }
 
 enum Rotation {
@@ -53,19 +59,16 @@ where
     DC: OutputPin,
     RST: OutputPin,
 {
-    pub fn new<S>(
-        spi: impl Peripheral<P = S> + 'd,
+    pub fn new<SPI>(
+        spi: impl Peripheral<P = SPI> + 'd,
         sclk: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
         sdo: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
         dc: DC,
         rst: RST,
         baudrate: u32,
-        local_location: LocalNetworkLocation,
-        global_location: LocalNetworkLocation,
-        coordinate: Coordinate,
     ) -> Display<'d, DC, RST>
     where
-        S: SpiAnyPins,
+        SPI: SpiAnyPins,
     {
         // this project use st7735r
         let (rgb, inverted, width, height) = Self::st7735r_setting();
@@ -85,13 +88,14 @@ where
 
         display.init(&mut FreeRtos).unwrap();
         display.clear(Rgb565::BLACK).unwrap();
-        let mut ret = Display {
+        display.set_offset(6, 0);
+        Display {
             direction: Rotation::Zero,
             display,
-        };
-
-        ret.set_rotation_by_coordinate(local_location, global_location, coordinate);
-        ret
+            style: MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE),
+            x: 0,
+            y: 10,
+        }
     }
 
     /// return: (rgb, inverted, width, height)
@@ -121,6 +125,28 @@ where
 
         // todo:
         Rotation::Zero
+    }
+    pub fn print(&mut self, text: &str, new_line: bool) {
+        let x_size = self.style.font.character_size.width as i32;
+        let y_size = self.style.font.character_size.height as i32;
+
+        let text_width = text.len() as i32 * x_size;
+        Text::new(text, Point::new(self.x, self.y), self.style)
+            .draw(&mut self.display)
+            .unwrap();
+        if new_line {
+            self.x = 0;
+            self.y += y_size;
+        } else {
+            self.x += text_width;
+        }
+        if self.x > self.display.size().width as i32 {
+            self.x = 0;
+            self.y += y_size;
+        }
+        if self.y > self.display.size().height as i32 {
+            self.y = 0;
+        }
     }
 
     pub fn set_offset(&mut self, x: u16, y: u16) {
