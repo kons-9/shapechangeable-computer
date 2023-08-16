@@ -153,16 +153,16 @@ impl Packet {
             return flits;
         }
         // one message can have 48bit(6byte)
+        let mut flit_id = 1;
         let mut data = self.make_first_message();
 
         // add packet id and checksum
 
         if self.messages.len() == 0 {
-            let tail_flit = Flit::make_tail_flit(1, data);
+            let tail_flit = Flit::make_tail_flit(flit_id, data);
             flits.push(tail_flit);
             return flits;
         }
-        let mut flit_id = 1;
         let body_flit = Flit::make_body_flit(flit_id, data);
         flits.push(body_flit);
 
@@ -197,13 +197,13 @@ impl Packet {
         data[5] = ids[1];
         return data;
     }
-    fn load_first_message(flit: Flit) -> (PacketId, u8, Id, Id) {
-        let data = flit.to_be_bytes();
+    fn load_first_message(flit: Flit) -> Result<(PacketId, u8, Id, Id)> {
+        let (_flittype, _flit_id, data) = Flit::get_body_or_tail_information(flit)?;
         let packet_id = data[0];
         let checksum = data[1];
         let to = Id::from_be_bytes([data[2], data[3]]);
         let from = Id::from_be_bytes([data[4], data[5]]);
-        (packet_id, checksum, from, to)
+        Ok((packet_id, checksum, from, to))
     }
 
     pub fn from_flits(flits: Vec<Flit>) -> Result<Packet> {
@@ -224,7 +224,7 @@ impl Packet {
         }
 
         let (packet_id, checksum, global_source, global_destination) =
-            Self::load_first_message(flits[1]);
+            Self::load_first_message(flits[1])?;
 
         let mut data = Vec::new();
 
@@ -255,6 +255,13 @@ impl Packet {
                 data,
             ))
         } else {
+            #[cfg(test)]
+            assert_eq!(
+                Self::calculate_checksum(&data),
+                checksum,
+                "Checksum is not correct: data: {:?}",
+                data
+            );
             Err(anyhow!(
                 "Checksum is not correct: {:x}, {:x}",
                 checksum,
@@ -478,9 +485,9 @@ mod test {
     use crate::header::Header;
 
     #[test]
-    fn test_broadcast() {
-        let data: &str = "hello world";
-        let packet_data = data.as_bytes().to_vec();
+    fn test_to_flits() {
+        let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
+
         let packet = Packet::new(
             0,
             Header::Data,
@@ -490,12 +497,48 @@ mod test {
             ToId::Broadcast,
             packet_data,
         );
+        println!("packet: {:?}", packet);
+
+        assert_eq!(packet.checksum, 28);
+
         let flits = packet.to_flits();
-        let trans_packet = Packet::from_flits(flits).unwrap();
+        println!("checksum: {}", packet.checksum);
+        println!("flits: {:?}", flits);
+        println!("flit {:064b}", u64::from_be_bytes(flits[1].to_be_bytes()));
+        let mut trans_packet = Packet::from_flits(flits).unwrap();
+        for i in 0..packet.messages.len() {
+            assert_eq!(trans_packet.messages[i], packet.messages[i]);
+        }
+        for i in packet.messages.len()..trans_packet.messages.len() {
+            assert_eq!(0, trans_packet.messages[i])
+        }
+        trans_packet.messages = packet.messages.clone();
         assert_eq!(packet, trans_packet);
-        let trans_data = String::from_utf8(trans_packet.messages);
-        let trans_data = trans_data.unwrap();
-        let trans_data = trans_data.as_str();
-        assert_eq!(data, trans_data);
+    }
+
+    #[test]
+    fn test_make_first_flit() {
+        let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
+        let packet = Packet::new(
+            0,
+            Header::Data,
+            0,
+            ToId::Broadcast,
+            0,
+            ToId::Broadcast,
+            packet_data,
+        );
+        let bytes = packet.make_first_message();
+        println!("bytes: {:?}", bytes);
+        println!(
+            "flit: {:064b}",
+            u64::from_be_bytes(Flit::make_body_flit(1, bytes).to_be_bytes())
+        );
+        assert_eq!(bytes[0], 0b00000000);
+        assert_eq!(bytes[1], 28);
+        assert_eq!(bytes[2], 0xFF);
+        assert_eq!(bytes[3], 0xFF);
+        assert_eq!(bytes[4], 0x0);
+        assert_eq!(bytes[5], 0x0);
     }
 }

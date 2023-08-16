@@ -189,15 +189,4 @@ impl LocalNetwork {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
-
-    #[test]
-    fn test_root() {
-        // root and upleft
-        let mut block3 = [0; 8];
-        block3[7] = 0x00000001;
-        // let efuse = Efuse { block3 };
-
-        // let localnet = LocalNetwork::new();
-        // println!("{:?}", localnet);
-    }
 }

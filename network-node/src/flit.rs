@@ -191,6 +191,9 @@ impl Flit {
     pub fn change_flit_type(flit: &mut Flit, flit_type: FlitType) {
         Self::clear_flit_type(flit);
         Self::set_flit_type(flit, flit_type);
+        flit.0 &= !(0b11111111);
+        let sum = Self::calculate_checksum(&flit.to_be_bytes());
+        flit.0 |= sum as u64;
     }
     fn set_flit_type(flit: &mut Flit, flit_type: FlitType) {
         *flit |= (flit_type as u64) << 62;
@@ -271,6 +274,12 @@ impl Flit {
         if sum == checksum {
             Ok((length_of_flit, header, source_id, destination_id, packet_id))
         } else {
+            #[cfg(test)]
+            assert_eq!(
+                sum, checksum,
+                "Checksum is not correct in flit.rs(get_head_information): bytes: {:?}",
+                bytes
+            );
             Err(anyhow!("Checksum is not correct(get_head_information)"))
         }
     }
@@ -294,7 +303,11 @@ impl Flit {
             Ok((flit_type, flit_id, message))
         } else {
             #[cfg(test)]
-            assert_eq!(checksum, sum, "Checksum is not correct: {:?}", bytes);
+            assert_eq!(
+                checksum, sum,
+                "Checksum is not correct in flit.rs(get_body_or_tail_information): bytes: {:?}, flit: {:?}",
+                bytes,flit
+            );
             Err(anyhow!(
                 "Checksum is not correct (get_body_or_tail_information)"
             ))
