@@ -348,7 +348,7 @@ where
         }
     }
 
-    pub(crate) fn get_packet(&mut self) -> Result<Option<Packet>> {
+    pub fn get_packet(&mut self) -> Result<Option<Packet>> {
         // whether there is data in buffer.
         let packet = match Packet::receive(&mut self.serial) {
             Ok(Some(packet)) => packet,
@@ -409,5 +409,17 @@ where
     }
     pub fn print_coordinate(&self) {
         println!("coordinate: {:?}", self.coordinate);
+    }
+    pub fn flush_read(&mut self) -> Result<()> {
+        self.serial.flush_read()?;
+        Ok(())
+    }
+    pub fn flush_write(&mut self) -> Result<()> {
+        self.serial.flush_write()?;
+        Ok(())
+    }
+    pub fn flush_all(&mut self) -> Result<()> {
+        self.serial.flush_all()?;
+        Ok(())
     }
 }

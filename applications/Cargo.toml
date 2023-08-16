@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 embedded-graphics = "0.8.1"
 anyhow = "1.0.72"
+network-node = { path = "../network-node" }

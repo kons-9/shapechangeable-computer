@@ -77,6 +77,22 @@ fn main() -> Result<()> {
 
     // after network connected
     loop {
+        // receive data
+        let packet = {
+            let messages = network.get_packet();
+            if messages.is_err() {
+                network.flush_read().expect("hardware error");
+                continue;
+            }
+            let messages = messages.unwrap();
+            if messages.is_none() {
+                continue;
+            }
+            messages.unwrap()
+        };
+
+        match packet.get_header() {}
+
         esp_idf_hal::delay::Delay::delay_ms(1000);
     }
 }
