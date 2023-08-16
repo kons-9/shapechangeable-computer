@@ -7,7 +7,7 @@ You can use example/\*.rs as test of hardware.
 But be careful using efuse-write function. it is not recoverable after you execute it.(you can generate using generate.zsh)
 <!-- But you should not use efuse.rs before  -->
 
-# documents
+# Documents
 ## Flit
 Flit consists of 64 bits. Flit type is only four types, basic three types, head, body and tail, and irregular one type, nope flit.
 A header of flit(packet) that need only head flit begin with H.

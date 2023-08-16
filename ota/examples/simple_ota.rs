@@ -1,7 +1,9 @@
-use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
-use log::*;
-pub mod ota;
+use anyhow::Result;
+// use ota::ota::Ota;
 
+// download the firmware from the server by http
+
+#[derive(Debug)]
 #[toml_cfg::toml_config]
 pub struct Config {
     #[default("")]
@@ -20,6 +22,8 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     let config = CONFIG;
+    println!("{:?}", config);
+    println!("{:?}", std::env::var("CARGO_PKG_NAME"));
     println!("url: {}", config.url);
     println!("filename: {}", config.filename);
     println!("wifi_ssid: {}", config.wifi_ssid);

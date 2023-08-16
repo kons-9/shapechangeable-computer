@@ -85,10 +85,11 @@ where
         info!("not root node");
         let ip_address = localnet.get_mac_address();
 
-        while Self::check_connection(&mut serial, ip_address)? {
+        while !Self::check_connection(&mut serial, ip_address)? {
             std::thread::sleep(Duration::from_millis(100));
             continue;
         }
+        info!("confirmed connection with other nodes");
 
         // not root, so need to connect other nodes(units).
         let mut neighbor_confirmed: Vec<(Id, Coordinate)> = Vec::new();
@@ -277,12 +278,15 @@ where
 
     /// check connection with other nodes that is not in the same local network.
     fn check_connection(serial: &mut S, node_id: Id) -> Result<bool> {
+        info!("making check connection packet");
         let packet = Packet::make_check_connection_packet(node_id);
         packet.send(serial)?;
+        info!("send check connection packet");
         let received_packet = match Packet::receive(serial)? {
-            Some(packet) => packet,
+            Some(_packet) => _packet,
             None => return Ok(false),
         };
+        info!("received_packet: {:?}", received_packet);
         match received_packet.get_header() {
             Header::HCheckConnection => {
                 let source = received_packet.get_from();
@@ -407,6 +411,9 @@ where
     pub fn get_global_location(&self) -> LocalNetworkLocation {
         self.global_location
     }
+    pub fn get_ip_address(&self) -> Id {
+        self.ip_address
+    }
     pub fn print_coordinate(&self) {
         println!("coordinate: {:?}", self.coordinate);
     }
@@ -420,6 +427,10 @@ where
     }
     pub fn flush_all(&mut self) -> Result<()> {
         self.serial.flush_all()?;
+        Ok(())
+    }
+    pub fn send(&mut self, packet: Packet) -> Result<()> {
+        packet.send(&mut self.serial)?;
         Ok(())
     }
 }

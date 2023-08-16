@@ -54,15 +54,17 @@ impl Packet {
     // connection
     pub fn send_broadcast(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         let flits = self.to_flits();
+        let is_ack = self.header.is_require_ack();
         for flit in flits {
-            flit.send(serial)?;
+            flit.send(serial, is_ack)?;
         }
         Ok(())
     }
     pub fn send(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         let flits = self.to_flits();
+        let is_ack = self.header.is_require_ack();
         for flit in flits {
-            flit.send(serial)?;
+            flit.send(serial, is_ack)?;
         }
         Ok(())
     }

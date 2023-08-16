@@ -43,8 +43,8 @@ impl Flit {
         serial.send(&self.to_be_bytes())?;
         Ok(())
     }
-    pub fn send(&self, serial: &mut dyn SerialTrait) -> Result<()> {
-        if !self.get_header()?.is_require_ack() {
+    pub fn send(&self, serial: &mut dyn SerialTrait, is_ack: bool) -> Result<()> {
+        if !is_ack {
             serial.send(&self.to_be_bytes())?;
             return Ok(());
         }

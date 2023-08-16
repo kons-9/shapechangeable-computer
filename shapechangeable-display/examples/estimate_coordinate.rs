@@ -1,19 +1,12 @@
 use anyhow::Result;
-use embedded_graphics::mono_font::ascii::FONT_6X10;
-use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::*;
-
-use embedded_graphics::text::Text;
-
-use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
 
 use global_network::DefaultProtocol;
 use log::info;
+use network_node::header::Header;
+use network_node::packet::Packet;
 use network_node::NetworkNode;
-use st7735_lcd::Orientation;
 use std_display::display::Display;
 use std_display::efuse::Efuse;
 use std_display::serial;
@@ -78,24 +71,53 @@ fn main() -> Result<()> {
             let messages = network.get_packet();
             if messages.is_err() {
                 network.flush_read().expect("hardware error");
+                esp_idf_hal::delay::Delay::delay_ms(100);
                 continue;
             }
             let messages = messages.unwrap();
             if messages.is_none() {
+                esp_idf_hal::delay::Delay::delay_ms(100);
                 continue;
             }
             messages.unwrap()
         };
 
         match packet.get_header() {
+            Header::HCheckConnection => {
+                display.print("connected", true);
+                network.send(Packet::make_check_connection_packet(
+                    network.get_ip_address(),
+                ))?;
+            }
+            Header::HRequestConfirmedCoordinate => {
+                display.print("connected", true);
+                let id = network.get_ip_address() as u16;
+                let x = network.get_coordinate().0 as u16;
+                let y = network.get_coordinate().1 as u16;
+
+                let data = [
+                    0b11111111 as u8,
+                    (id >> 8) as u8,
+                    (id & 0xff) as u8,
+                    (x >> 8) as u8,
+                    (x & 0xff) as u8,
+                    (y >> 8) as u8,
+                    (y & 0xff) as u8,
+                ]
+                .to_vec();
+                network.send(Packet::new(
+                    0,
+                    Header::ConfirmCoordinate,
+                    network.get_ip_address(),
+                    network_node::packet::ToId::Broadcast,
+                    network.get_ip_address(),
+                    network_node::packet::ToId::Broadcast,
+                    data,
+                ))?;
+            }
             _ => {
-                todo!();
                 println!("received packet: {:?}", packet);
-                display.print(format!("received packet: {:?}", packet).as_str(), true);
-                let header = packet.get_header();
             }
         }
-
-        esp_idf_hal::delay::Delay::delay_ms(1000);
     }
 }
