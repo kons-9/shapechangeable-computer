@@ -117,6 +117,7 @@ impl Packet {
         if header.is_only_head() {
             return 1;
         }
+        // headflit(1) + first_messages + messages / 6
         let mut length_of_flit = 2;
         length_of_flit += (messages.len() + 5) / 6;
         length_of_flit
@@ -161,13 +162,14 @@ impl Packet {
             flits.push(tail_flit);
             return flits;
         }
-        let flit_id = 1;
+        let mut flit_id = 1;
         let body_flit = Flit::make_body_flit(flit_id, data);
         flits.push(body_flit);
 
         // add message
 
         for i in 0..self.length_of_flit - 2 {
+            flit_id += 1;
             for j in 0..6 {
                 data[j] = self.messages[i * 6 + j]
             }
@@ -187,20 +189,20 @@ impl Packet {
 
         data[0] = self.packet_id;
         data[1] = self.checksum;
-        let ids = self.global_to.to_id().to_le_bytes();
+        let ids = self.global_to.to_id().to_be_bytes();
         data[2] = ids[0];
         data[3] = ids[1];
-        let ids = self.global_from.to_le_bytes();
+        let ids = self.global_from.to_be_bytes();
         data[4] = ids[0];
         data[5] = ids[1];
         return data;
     }
     fn load_first_message(flit: Flit) -> (PacketId, u8, Id, Id) {
-        let data = flit.to_le_bytes();
+        let data = flit.to_be_bytes();
         let packet_id = data[0];
         let checksum = data[1];
-        let to = Id::from_le_bytes([data[2], data[3]]);
-        let from = Id::from_le_bytes([data[4], data[5]]);
+        let to = Id::from_be_bytes([data[2], data[3]]);
+        let from = Id::from_be_bytes([data[4], data[5]]);
         (packet_id, checksum, from, to)
     }
 
@@ -229,6 +231,8 @@ impl Packet {
         for i in 2..length_of_flit {
             let (flittype, flit_id, message) = Flit::get_body_or_tail_information(flits[i])?;
             if flit_id as usize != i {
+                #[cfg(test)]
+                assert_eq!(flit_id as usize, i, "The flit id is not correct.");
                 return Err(anyhow!("The flit id is not correct."));
             }
 
@@ -251,14 +255,15 @@ impl Packet {
                 data,
             ))
         } else {
-            Err(anyhow!("Checksum is not correct"))
+            Err(anyhow!(
+                "Checksum is not correct: {:x}, {:x}",
+                checksum,
+                Self::calculate_checksum(&data)
+            ))
         }
     }
     fn check_checksum(data: &Vec<u8>, checksum: u8) -> bool {
-        let mut sum: u8 = 0;
-        for i in 0..data.len() {
-            sum = sum.wrapping_add(data[i]);
-        }
+        let sum = Self::calculate_checksum(data);
         sum == checksum
     }
 
@@ -308,13 +313,13 @@ impl Packet {
             messages.push(0);
         }
         for (_, i) in coordinate {
-            let id = source.to_le_bytes();
+            let id = source.to_be_bytes();
             messages.push(id[0]);
             messages.push(id[1]);
-            let x = i.0.to_le_bytes();
+            let x = i.0.to_be_bytes();
             messages.push(x[0]);
             messages.push(x[1]);
-            let y = i.1.to_le_bytes();
+            let y = i.1.to_be_bytes();
             messages.push(y[0]);
             messages.push(y[1]);
         }
@@ -338,13 +343,13 @@ impl Packet {
         let this_coordinate = this_coordinate.unwrap();
         let mut messages = Vec::new();
         messages.push(0b11111111);
-        let id = source.to_le_bytes();
+        let id = source.to_be_bytes();
         messages.push(id[0]);
         messages.push(id[1]);
-        let x = this_coordinate.0.to_le_bytes();
+        let x = this_coordinate.0.to_be_bytes();
         messages.push(x[0]);
         messages.push(x[1]);
-        let y = this_coordinate.1.to_le_bytes();
+        let y = this_coordinate.1.to_be_bytes();
         messages.push(y[0]);
         messages.push(y[1]);
 
@@ -411,9 +416,9 @@ impl Packet {
 
         let mut coordinates = Vec::new();
         for i in (1..messages.len()).step_by(6) {
-            let id = Id::from_le_bytes([messages[i], messages[i + 1]]);
-            let x = CoordinateComponent::from_le_bytes([messages[i + 2], messages[i + 3]]);
-            let y = CoordinateComponent::from_le_bytes([messages[i + 4], messages[i + 5]]);
+            let id = Id::from_be_bytes([messages[i], messages[i + 1]]);
+            let x = CoordinateComponent::from_be_bytes([messages[i + 2], messages[i + 3]]);
+            let y = CoordinateComponent::from_be_bytes([messages[i + 4], messages[i + 5]]);
             coordinates.push((id, (x, y)));
         }
         if is_confirmed && coordinates.len() != 1 {
