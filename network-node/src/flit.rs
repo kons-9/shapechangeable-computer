@@ -4,6 +4,7 @@ use super::serial::SerialTrait;
 use crate::utils::type_alias::Id;
 use anyhow::anyhow;
 use anyhow::Result;
+use log::info;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::ops;
@@ -45,10 +46,12 @@ impl Flit {
     }
     pub fn send(&self, serial: &mut dyn SerialTrait, is_ack: bool) -> Result<()> {
         if !is_ack {
+            info!("don't require ack flit");
             serial.send(&self.to_be_bytes())?;
             return Ok(());
         }
 
+        info!("require ack flit");
         // require ack flit
         loop {
             serial.send(&self.to_be_bytes())?;

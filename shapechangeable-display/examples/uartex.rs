@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         match serial.send(b"hello!!!") {
             Ok(_) => {
                 println!("Sent: hello!!!");
-                println!("{:?}", b"hello!!!");
+                println!("Data: {:?}", b"hello!!!");
             }
             Err(e) => {
                 println!("SendError: {:?}", e);

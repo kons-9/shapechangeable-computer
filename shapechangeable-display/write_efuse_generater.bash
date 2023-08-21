@@ -1,6 +1,6 @@
 #!/bin/bash
 
-HISTORY_MAC_ADDRESS_FILE=".cache/history_mac_address.txt"
+HISTORY_MAC_ADDRESS_FILE="history_mac_address.txt"
 TEMPLATE_FILE="template/write_efuse_template.rs"
 TARGET_DIRECTORY="src/bin/"
 

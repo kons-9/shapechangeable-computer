@@ -33,6 +33,8 @@ fn main() -> Result<()> {
     println!("data3_7: {:x}", data3_7);
 
     loop {
+        let data3_7 = Efuse::read_reg(3, 7);
+        println!("data3_7: {:x}", data3_7);
         thread::sleep(Duration::from_secs(1));
     }
 }

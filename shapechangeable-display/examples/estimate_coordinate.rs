@@ -71,26 +71,27 @@ fn main() -> Result<()> {
             let messages = network.get_packet();
             if messages.is_err() {
                 network.flush_read().expect("hardware error");
+                display.print("flush_read error", true);
                 esp_idf_hal::delay::Delay::delay_ms(100);
                 continue;
             }
             let messages = messages.unwrap();
             if messages.is_none() {
+                display.print("no packet", true);
                 esp_idf_hal::delay::Delay::delay_ms(100);
                 continue;
             }
             messages.unwrap()
         };
+        display.print("received packet", true);
 
         match packet.get_header() {
             Header::HCheckConnection => {
-                display.print("connected", true);
                 network.send(Packet::make_check_connection_packet(
                     network.get_ip_address(),
                 ))?;
             }
             Header::HRequestConfirmedCoordinate => {
-                display.print("connected", true);
                 let id = network.get_ip_address() as u16;
                 let x = network.get_coordinate().0 as u16;
                 let y = network.get_coordinate().1 as u16;

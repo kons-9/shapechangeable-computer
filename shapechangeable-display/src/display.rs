@@ -3,6 +3,7 @@ use embedded_graphics::mono_font::ascii::FONT_6X10;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::text::Text;
 use embedded_graphics_core::draw_target::DrawTarget;
 use embedded_hal::digital::v2::OutputPin;
@@ -131,6 +132,17 @@ where
         let y_size = self.style.font.character_size.height as i32;
 
         let text_width = text.len() as i32 * x_size;
+        // clear the line
+        Rectangle::new(
+            Point::new(self.x, self.y),
+            Size::new(text_width as u32, y_size as u32),
+        )
+        .into_styled(embedded_graphics::primitives::PrimitiveStyle::with_fill(
+            Rgb565::BLACK,
+        ))
+        .draw(&mut self.display)
+        .unwrap();
+
         Text::new(text, Point::new(self.x, self.y), self.style)
             .draw(&mut self.display)
             .unwrap();

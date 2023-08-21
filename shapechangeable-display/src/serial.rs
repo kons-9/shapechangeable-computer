@@ -4,9 +4,9 @@ use esp_idf_hal::gpio::{InputPin, OutputPin};
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::uart::{Uart, UartConfig, UartDriver};
-use esp_idf_sys::{uart_wait_tx_done, ESP_OK};
 
 use network_node::serial::SerialTrait;
+use log::info;
 
 /// rapper of UartDriver
 /// we only read and write 8 bytes because flit size is 8 bytes
@@ -67,6 +67,7 @@ impl SerialTrait for Serial<'_> {
         if length != 8 {
             return Err(anyhow::anyhow!("uart write error"));
         }
+        info!("send by serial: {:?}", data);
         Ok(())
     }
     /// receive [u8; 8] from arduino
