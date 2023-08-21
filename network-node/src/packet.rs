@@ -52,14 +52,14 @@ pub struct Packet {
 
 impl Packet {
     // connection
-    pub fn send_broadcast(&self, serial: &mut dyn SerialTrait) -> Result<()> {
-        let flits = self.to_flits();
-        let is_ack = self.header.is_require_ack();
-        for flit in flits {
-            flit.send(serial, is_ack)?;
-        }
-        Ok(())
-    }
+    // pub fn send_broadcast(&self, serial: &mut dyn SerialTrait) -> Result<()> {
+    //     let flits = self.to_flits();
+    //     let is_ack = self.header.is_require_ack();
+    //     for flit in flits {
+    //         flit.send(serial, is_ack)?;
+    //     }
+    //     Ok(())
+    // }
     pub fn send(&self, serial: &mut dyn SerialTrait) -> Result<()> {
         let flits = self.to_flits();
         let is_ack = self.header.is_require_ack();
@@ -486,6 +486,7 @@ mod test {
     #![allow(unused_imports)]
     use super::*;
     use crate::header::Header;
+    use crate::serial::test::TestSerial;
 
     #[test]
     fn test_to_flits() {
@@ -586,5 +587,33 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8];
         let sum = Packet::calculate_checksum(&data);
         assert_eq!(sum, 36);
+    }
+
+    #[test]
+    fn test_send() {
+        let mut serial = TestSerial::new();
+        let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
+        let packet = Packet::new(
+            0,
+            Header::HCheckConnection,
+            0,
+            ToId::Broadcast,
+            0,
+            ToId::Broadcast,
+            packet_data,
+        );
+        packet.send(&mut serial).expect("failed to send packet");
+
+        let received = match Packet::receive(&mut serial).expect("failed to receive packet") {
+            Some(packet) => packet,
+            None => panic!("failed to receive packet"),
+        };
+        assert_eq!(packet, received);
+    }
+    #[test]
+    fn test_request_confirmed_coordinate_packet() {
+        todo!("test reply_for_request_coordinate_packet");
+        todo!("test reply_for_request_confirmed_coordinate_packet");
+        todo!("test reply_for_request_confirmed_coordinate_packet in different localnet");
     }
 }

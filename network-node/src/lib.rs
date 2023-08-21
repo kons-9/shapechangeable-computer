@@ -1,4 +1,4 @@
-mod flit;
+pub mod flit;
 pub mod header;
 pub mod localnet;
 pub mod packet;
@@ -16,7 +16,7 @@ use crate::{
 use system::SystemInfo;
 use utils::type_alias::{Coordinate, Id};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::info;
 
 use localnet::LocalNetwork;
@@ -81,54 +81,82 @@ where
                 packet_id: 0,
             });
         }
+        // ///////////////////////////////////////////
+        // not root node
+        // //////////////////////////////////////////
 
         info!("not root node");
         let ip_address = localnet.get_mac_address();
 
-        while !Self::check_connection(&mut serial, ip_address)? {
-            std::thread::sleep(Duration::from_millis(100));
-            continue;
-        }
-        info!("confirmed connection with other nodes");
-
         // not root, so need to connect other nodes(units).
         let mut neighbor_confirmed: Vec<(Id, Coordinate)> = Vec::new();
 
-        while !Self::is_ready(&neighbor_confirmed, ip_address)? {
-            // send broadcast packet
-            Self::request_confirmed_coordinate(&mut serial, ip_address)?;
-
-            // delay
-            sleep(Duration::from_millis(100));
-
-            let mut loop_count = 0;
+        'outer: loop {
             loop {
-                if loop_count > 100 {
-                    // time out
-                    return Err(anyhow::anyhow!("connection is not exist"));
+                match Self::check_connection(&mut serial, ip_address) {
+                    Ok(true) => break,
+                    Ok(false) => {
+                        info!("connection is not exist");
+                    }
+                    Err(e) => {
+                        println!("error: {:?}", e);
+                        serial.flush_all()?;
+                    }
                 }
-                let received_packet = match Packet::receive(&mut serial)? {
-                    Some(packet) => packet,
-                    None => {
-                        sleep(Duration::from_millis(10));
+                std::thread::sleep(Duration::from_millis(3000));
+                continue;
+            }
+            info!("confirmed connection with other nodes");
+
+            while !Self::is_ready(&neighbor_confirmed, ip_address)? {
+                // send broadcast packet
+                match Self::request_confirmed_coordinate(&mut serial, ip_address) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("error: {:?}", e);
+                        serial.flush_all()?;
+                        continue;
+                    }
+                }
+
+                // delay
+                sleep(Duration::from_millis(3000));
+
+                let mut loop_count = 0;
+                loop {
+                    if loop_count > 10000 {
+                        // time out
+                        continue 'outer;
+                    }
+                    let received_packet = match Packet::receive(&mut serial) {
+                        Ok(Some(packet)) => packet,
+                        Ok(None) => {
+                            sleep(Duration::from_millis(10));
+                            loop_count += 1;
+                            continue;
+                        }
+                        Err(e) => {
+                            println!("error: {:?}", e);
+                            loop_count += 1;
+                            serial.flush_all()?;
+                            continue;
+                        }
+                    };
+                    let is_valid = Self::process_received_packet_of_request(
+                        &mut serial,
+                        ip_address,
+                        received_packet,
+                        &mut neighbor_confirmed,
+                    )?;
+
+                    if !is_valid {
+                        serial.flush_read()?;
+                        info!("unexpected packet");
                         loop_count += 1;
                         continue;
                     }
-                };
-                let is_valid = Self::process_received_packet_of_request(
-                    &mut serial,
-                    ip_address,
-                    received_packet,
-                    &mut neighbor_confirmed,
-                )?;
-
-                if !is_valid {
-                    serial.flush_read()?;
-                    info!("unexpected packet");
-                    loop_count += 1;
-                    continue;
+                    break 'outer;
                 }
-                break;
             }
         }
 
@@ -283,16 +311,21 @@ where
         packet.send(serial)?;
         info!("send check connection packet");
         let received_packet = match Packet::receive(serial)? {
-            Some(_packet) => _packet,
+            Some(_packet) => {
+                if _packet.get_from() == node_id {
+                    return Ok(false);
+                }
+                _packet
+            }
             None => return Ok(false),
         };
-        info!("received_packet: {:?}", received_packet);
         match received_packet.get_header() {
             Header::HCheckConnection => {
                 let source = received_packet.get_from();
                 if is_same_localnet(node_id, source) {
                     Ok(false)
                 } else {
+                    info!("received_packet: {:?}", received_packet);
                     Ok(true)
                 }
             }
@@ -309,9 +342,13 @@ where
         if neighbor_confirmed.len() < 1 {
             return Ok(false);
         }
+
+        // check whether there is a node that is not in the same local network.
         for (id, _) in neighbor_confirmed.iter() {
             if *id == this_id || !is_same_localnet(*id, this_id) {
-                panic!("software bug: same id is exist in neighbor_confirmed");
+                return Err(anyhow!(
+                    "software bug: the same id is exist in neighbor_confirmed"
+                ));
             }
         }
 
@@ -345,6 +382,7 @@ where
         self.packet_id += 1;
         Ok(packet)
     }
+
     pub fn get_messages(&mut self) -> Result<Option<Vec<u8>>> {
         match self.get_packet()? {
             Some(packet) => Ok(Some(packet.get_messages())),
@@ -352,6 +390,7 @@ where
         }
     }
 
+    /// get packet from serial
     pub fn get_packet(&mut self) -> Result<Option<Packet>> {
         // whether there is data in buffer.
         let packet = match Packet::receive(&mut self.serial) {
@@ -361,9 +400,9 @@ where
                 return Ok(None);
             }
             Err(_) => {
-                // unrecovered error
-                // maybe, should use flush function
-                return Err(anyhow::anyhow!("unrecovered error"));
+                info!("receive error in get_packet");
+                self.flush_all()?;
+                return self.get_packet();
             }
         };
         // whether it is packet that was sent to this node

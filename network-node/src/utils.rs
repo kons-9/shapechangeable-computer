@@ -83,4 +83,19 @@ pub mod util {
     pub fn add_y(coordinate: Coordinate, y: CoordinateComponent) -> Coordinate {
         (coordinate.0, coordinate.1 + y)
     }
+    pub fn get_first_messages(efuse_value: Id) -> Vec<String> {
+        let mut messages = Vec::new();
+        // is root
+        messages.push(format!("root: {}", is_root(efuse_value)));
+        // localnet location
+        messages.push(format!(
+            "location: {:?}",
+            get_localnet_location(efuse_value)
+        ));
+        // localnet id
+        messages.push(format!("lid: {}", get_localnet_id(efuse_value)));
+        messages.push(format!("mac: {}", get_mac_address(efuse_value)));
+
+        messages
+    }
 }
