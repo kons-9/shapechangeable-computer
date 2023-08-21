@@ -6,6 +6,7 @@ use global_network::DefaultProtocol;
 use log::info;
 use network_node::header::Header;
 use network_node::packet::Packet;
+use network_node::utils::util::{self, get_first_messages};
 use network_node::NetworkNode;
 use std_display::display::Display;
 use std_display::efuse::Efuse;
@@ -27,8 +28,13 @@ fn main() -> Result<()> {
 
     let mut display = Display::new(spi, sclk, sdo, dc, rst, hertz);
 
-    display.print("display initialized", true);
-    display.print("begining serial initialization...", true);
+    let efuse = Efuse::new();
+    let value = efuse.get_efuse_value();
+
+    let first_messages = get_first_messages(value);
+    for message in first_messages {
+        display.print(&message, true);
+    }
 
     // serial initialization
     let uart = peripheral.uart1;
@@ -37,14 +43,20 @@ fn main() -> Result<()> {
     let enable: AnyOutputPin = peripheral.pins.gpio5.into();
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
 
-    display.print("serial initialized", true);
     display.print("begining network initialization...", true);
 
     // network initialization
     let protocol: DefaultProtocol = DefaultProtocol::new();
-    let efuse = Efuse::new();
-    let mut network =
-        NetworkNode::new(serial, protocol, &efuse).expect("network initialization failed");
+
+    let mut network = match NetworkNode::new(serial, protocol, &efuse) {
+        Ok(network) => network,
+        Err(e) => {
+            display.print(&format!("failed: {:?}", e), true);
+            println!("network initialization failed: {:?}", e);
+            loop {}
+        }
+    };
+
     network.print_coordinate();
     display.set_rotation_by_coordinate(
         network.get_local_location(),
@@ -52,38 +64,52 @@ fn main() -> Result<()> {
         network.get_coordinate(),
     );
 
-    info!("network initialized");
-    display.print("network initialized", true);
-
     let coordinate = network.get_coordinate();
-    let coordinate_str = format!("coordinate: ({}, {})", coordinate.0, coordinate.1);
+    let coordinate_str = format!("(x,y): ({}, {})", coordinate.0, coordinate.1);
+    display.print("network initialized", true);
     display.print(&coordinate_str, true);
     display.print("estimation is done.", true);
     display.print("waiting for network connection...", true);
 
+    info!("network initialized");
     info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
     info!("estimation is done");
 
     // after network connected
+    let mut flag = true;
     loop {
         // receive data
         let packet = {
             let messages = network.get_packet();
             if messages.is_err() {
-                network.flush_read().expect("hardware error");
-                display.print("flush_read error", true);
-                esp_idf_hal::delay::Delay::delay_ms(100);
+                if let Err(e) = network.flush_all() {
+                    display.print(&format!("flush_read error: {:?}", e), true);
+                    panic!("flush_read error: {:?}", e);
+                }
+                display.print("recovering...", true);
+                // display.print("flush_read error", true);
+                // esp_idf_hal::delay::Delay::delay_ms(10);
                 continue;
             }
             let messages = messages.unwrap();
             if messages.is_none() {
-                display.print("no packet", true);
-                esp_idf_hal::delay::Delay::delay_ms(100);
+                if flag {
+                    display.print("no packet", true);
+                    flag = false;
+                }
+                esp_idf_hal::delay::Delay::delay_ms(10);
                 continue;
             }
             messages.unwrap()
         };
-        display.print("received packet", true);
+
+        let from = packet.get_global_from();
+        if util::is_same_localnet(from, network.get_ip_address()) {
+            continue;
+        }
+        flag = true;
+        display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
+        display.print(format!("src: {:?}", from).as_str(), true);
 
         match packet.get_header() {
             Header::HCheckConnection => {

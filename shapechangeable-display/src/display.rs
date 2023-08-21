@@ -132,10 +132,13 @@ where
         let y_size = self.style.font.character_size.height as i32;
 
         let text_width = text.len() as i32 * x_size;
+        // todo: new line if self.x + text_width > display.width
+
         // clear the line
         Rectangle::new(
-            Point::new(self.x, self.y),
-            Size::new(text_width as u32, y_size as u32),
+            Point::new(self.x, self.y - y_size + 1),
+            // Size::new((text_width + x_size * 2) as u32, y_size as u32),
+            Size::new(self.display.size().width, y_size as u32),
         )
         .into_styled(embedded_graphics::primitives::PrimitiveStyle::with_fill(
             Rgb565::BLACK,
@@ -146,18 +149,21 @@ where
         Text::new(text, Point::new(self.x, self.y), self.style)
             .draw(&mut self.display)
             .unwrap();
+
         if new_line {
             self.x = 0;
             self.y += y_size;
         } else {
             self.x += text_width;
         }
+
         if self.x > self.display.size().width as i32 {
             self.x = 0;
             self.y += y_size;
         }
+
         if self.y > self.display.size().height as i32 {
-            self.y = 0;
+            self.y = y_size;
         }
     }
 
