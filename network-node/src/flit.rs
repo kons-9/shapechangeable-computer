@@ -23,14 +23,14 @@ type FlitId = u8;
 #[repr(u8)]
 pub enum FlitType {
     // 2bits
-    Nope = 0,
-    Head = 1,
-    Body = 2,
-    Tail = 3,
+    Nope = 0, // 00
+    Head = 1, // 01
+    Body = 2, // 10
+    Tail = 3, // 11
 }
 
-const TIMEOUT_MILLIS: u64 = 1000;
-const DELAY_MILLIS: u64 = 10;
+const TIMEOUT_MILLIS: u64 = 100000;
+const DELAY_MILLIS: u64 = 1000;
 const MAX_LOOPS: u64 = TIMEOUT_MILLIS / DELAY_MILLIS;
 pub const MAX_FLIT_LENGTH: FlitId = 64;
 
@@ -96,25 +96,33 @@ impl Flit {
             flit = Flit::from_be_bytes(receive.unwrap());
             break;
         }
-        if flit.get_header()?.is_require_ack() {
-            let ack_flit = Flit::make_ack_flit(flit)?;
-            serial.send(&ack_flit.to_be_bytes())?;
-        }
+        flit.process_ack(serial)?;
         return Ok(flit);
     }
 
     pub fn receive(serial: &mut dyn SerialTrait) -> Result<Option<Self>> {
-        // receive ack
+        // receive
         let receive = serial.receive()?;
         if let Option::<[u8; 8]>::None = receive {
             return Ok(None);
         }
         let flit = Flit::from_be_bytes(receive.unwrap());
-        if flit.get_header()?.is_require_ack() {
-            let ack_flit = Flit::make_ack_flit(flit)?;
+        flit.process_ack(serial)?;
+
+        return Ok(Some(flit));
+    }
+
+    pub fn process_ack(&self, serial: &mut dyn SerialTrait) -> Result<()> {
+        let (flittype, _) = Flit::get_flit_type_and_length(self)?;
+        if flittype != FlitType::Head {
+            return Ok(());
+        }
+
+        if self.get_header()?.is_require_ack() {
+            let ack_flit = Flit::make_ack_flit(&self)?;
             serial.send(&ack_flit.to_be_bytes())?;
         }
-        return Ok(Some(flit));
+        Ok(())
     }
 
     // ////////////////////////////////
@@ -127,7 +135,7 @@ impl Flit {
         data |= val6bit & 0b00111111;
         data
     }
-    pub fn make_ack_flit(flit: Flit) -> Result<Flit> {
+    pub fn make_ack_flit(flit: &Flit) -> Result<Flit> {
         info!("make ack flit from {:?}", flit);
         let (_, _, source_id, destination_id, packet_id) = Flit::get_head_information(flit)?;
 
@@ -238,7 +246,8 @@ impl Flit {
     }
 
     // for all
-    fn get_flit_type_and_length(flit: Flit) -> Result<(FlitType, u8)> {
+    /// if type is not head, return (flittype, flit_id)
+    fn get_flit_type_and_length(flit: &Flit) -> Result<(FlitType, u8)> {
         // the toppest 2 bits
         // note: it is big endian
         let flit_type = Flit::get_2bits_from_u64(flit.0, 62);
@@ -248,9 +257,9 @@ impl Flit {
     pub(crate) fn check_ack_flit(ack_flit: Flit, original_flit: Flit) -> Result<bool> {
         // pull from get_head_information
         let (_, header, _source_id, destination_id, packet_id) =
-            Flit::get_head_information(ack_flit)?;
+            Flit::get_head_information(&ack_flit)?;
         let (_, _, original_source_id, _original_destination_id, original_packet_id) =
-            Flit::get_head_information(original_flit)?;
+            Flit::get_head_information(&original_flit)?;
         if header != Header::HAck {
             return Ok(false);
         }
@@ -265,7 +274,7 @@ impl Flit {
     }
 
     /// return (length_of_flit, header, source_id, destination_id, packet_id)
-    pub fn get_head_information(flit: Flit) -> Result<(u8, Header, Id, Id, PacketId)> {
+    pub fn get_head_information(flit: &Flit) -> Result<(u8, Header, Id, Id, PacketId)> {
         let bytes: [u8; 8] = flit.to_be_bytes();
         let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit)?;
         if flit_type != FlitType::Head {
@@ -293,7 +302,7 @@ impl Flit {
             Err(anyhow!("Checksum is not correct(get_head_information)"))
         }
     }
-    pub fn get_body_or_tail_information(flit: Flit) -> Result<(FlitType, u8, [u8; 6])> {
+    pub fn get_body_or_tail_information(flit: &Flit) -> Result<(FlitType, u8, [u8; 6])> {
         let bytes: [u8; 8] = flit.to_be_bytes();
         let (flit_type, flit_id) = Flit::get_flit_type_and_length(flit)?;
         if flit_type == FlitType::Head {
@@ -383,7 +392,7 @@ mod test {
         let flit = Flit::make_head_flit(0, Header::Data, 0, 1, 0);
         assert_eq!(Header::Data as u8, 0b00000000);
 
-        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(&flit).unwrap();
         assert_eq!(
             flit_type,
             FlitType::Head,
@@ -397,7 +406,7 @@ mod test {
         );
 
         let (length_of_flit, header, source_id, destination_id, packet_id) =
-            Flit::get_head_information(flit).unwrap();
+            Flit::get_head_information(&flit).unwrap();
         assert_eq!(length_of_flit, 0);
         assert_eq!(header, Header::Data);
         assert_eq!(source_id, 0);
@@ -408,7 +417,7 @@ mod test {
     fn test_simple_body_or_tail_information() {
         // body flit
         let flit = Flit::make_body_flit(0, [0; 6]);
-        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(flit).unwrap();
+        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(&flit).unwrap();
         assert_eq!(
             flit_type,
             FlitType::Body,
@@ -418,7 +427,7 @@ mod test {
         assert_eq!(flit_id, 0, "fail get_flit_type: flit {:064b}", flit.0);
         assert_eq!(message, [0; 6], "fail get_flit_type: flit {:064b}", flit.0);
         let flit = Flit::make_body_flit(0b111111, [0, 1, 2, 3, 4, 5]);
-        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(flit).unwrap();
+        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(&flit).unwrap();
         assert_eq!(
             flit_type,
             FlitType::Body,
@@ -439,7 +448,7 @@ mod test {
 
         // tail flit
         let flit = Flit::make_tail_flit(0, [0; 6]);
-        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(flit).unwrap();
+        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(&flit).unwrap();
         assert_eq!(
             flit_type,
             FlitType::Tail,
@@ -450,7 +459,7 @@ mod test {
         assert_eq!(message, [0; 6], "fail get_flit_type: flit {:064b}", flit.0);
 
         let flit = Flit::make_tail_flit(0b111111, [0, 1, 2, 3, 4, 5]);
-        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(flit).unwrap();
+        let (flit_type, flit_id, message) = Flit::get_body_or_tail_information(&flit).unwrap();
         assert_eq!(
             flit_type,
             FlitType::Tail,
@@ -484,7 +493,7 @@ mod test {
         let header = Header::HCheckConnection;
         let flit = Flit::make_head_flit(0, header, ip_address, 0xFF, 0);
         let (length_of_flit, header, source_id, destination_id, packet_id) =
-            Flit::get_head_information(flit).unwrap();
+            Flit::get_head_information(&flit).unwrap();
         assert_eq!(length_of_flit, 0);
         assert_eq!(header, Header::HCheckConnection);
         assert_eq!(source_id, 0);
@@ -498,7 +507,7 @@ mod test {
         match Flit::receive(&mut serial) {
             Ok(data) => {
                 if let Some(data) = data {
-                    if let Ok((len, head, src, dst, pid)) = Flit::get_head_information(data) {
+                    if let Ok((len, head, src, dst, pid)) = Flit::get_head_information(&data) {
                         assert_eq!(len, 0);
                         assert_eq!(head, Header::HCheckConnection);
                         assert_eq!(src, 0);
@@ -518,17 +527,17 @@ mod test {
     fn test_get_flit_type_and_length() {
         let flit = Flit::make_head_flit(0, Header::Data, 0, 1, 0);
 
-        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(&flit).unwrap();
         assert_eq!(flit_type, FlitType::Head);
         assert_eq!(length_of_flit, 0);
 
         let flit = Flit::make_body_flit(0, [0; 6]);
-        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(&flit).unwrap();
         assert_eq!(flit_type, FlitType::Body);
         assert_eq!(length_of_flit, 0);
 
         let flit = Flit::make_tail_flit(0, [0; 6]);
-        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(flit).unwrap();
+        let (flit_type, length_of_flit) = Flit::get_flit_type_and_length(&flit).unwrap();
         assert_eq!(flit_type, FlitType::Tail);
         assert_eq!(length_of_flit, 0);
     }

@@ -124,11 +124,11 @@ where
 
                 let mut loop_count = 0;
                 loop {
-                    if loop_count > 10000 {
+                    if loop_count > 1000 {
                         // time out
                         continue 'outer;
                     }
-                    let received_packet = match Packet::receive(&mut serial) {
+                    let received_packet = match Packet::receive(&mut serial, ip_address) {
                         Ok(Some(packet)) => packet,
                         Ok(None) => {
                             sleep(Duration::from_millis(10));
@@ -142,22 +142,23 @@ where
                             continue;
                         }
                     };
+                    info!("received packet: {:?}", received_packet);
                     let is_valid = Self::process_received_packet_of_request(
                         &mut serial,
                         ip_address,
                         received_packet,
                         &mut neighbor_confirmed,
                     )?;
+                    info!("neighbor_confirmed: {:?}", neighbor_confirmed);
 
                     if !is_valid {
-                        serial.flush_read()?;
-                        info!("unexpected packet");
                         loop_count += 1;
                         continue;
                     }
-                    break 'outer;
+                    break;
                 }
             }
+            break;
         }
 
         let (coordinate, global_location) =
@@ -196,7 +197,9 @@ where
                 let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
 
                 for coordinate in coordinates {
-                    neighbor_confirmed.push(coordinate);
+                    if !neighbor_confirmed.contains(&coordinate) {
+                        neighbor_confirmed.push(coordinate);
+                    }
                 }
                 return Ok(true);
             }
@@ -283,6 +286,10 @@ where
             (false, Y, false) => (add_x(coordinate, 1), LocalNetworkLocation::UpLeft),
         }
     }
+
+    /// find distance 1 neighbor from neighbor_confirmed
+    /// distance is calculated by L0 distance
+    /// return (id, coordinate, id_cmp, coordinate_cmp)
     fn find_distance_1_neighbor(
         neighbor_confirmed: &Vec<(Id, Coordinate)>,
     ) -> Option<(Id, Coordinate, Id, Coordinate)> {
@@ -310,7 +317,7 @@ where
         let packet = Packet::make_check_connection_packet(node_id);
         packet.send(serial)?;
         info!("send check connection packet");
-        let received_packet = match Packet::receive(serial)? {
+        let received_packet = match Packet::receive(serial, node_id)? {
             Some(_packet) => {
                 if _packet.get_from() == node_id {
                     return Ok(false);
@@ -345,10 +352,11 @@ where
 
         // check whether there is a node that is not in the same local network.
         for (id, _) in neighbor_confirmed.iter() {
-            if *id == this_id || !is_same_localnet(*id, this_id) {
-                return Err(anyhow!(
-                    "software bug: the same id is exist in neighbor_confirmed"
-                ));
+            if *id == this_id {
+                panic!("software bug: the same id is exist in neighbor_confirmed: neighbor_confirmed: {:?}", neighbor_confirmed);
+                // return Err(anyhow!(
+                //     "software bug: the same id is exist in neighbor_confirmed: neighbor_confirmed: {:?}", neighbor_confirmed,
+                // ));
             }
         }
 
@@ -393,7 +401,7 @@ where
     /// get packet from serial
     pub fn get_packet(&mut self) -> Result<Option<Packet>> {
         // whether there is data in buffer.
-        let packet = match Packet::receive(&mut self.serial) {
+        let packet = match Packet::receive(&mut self.serial, self.ip_address) {
             Ok(Some(packet)) => packet,
             Ok(None) => {
                 // no data in buffer
@@ -471,5 +479,40 @@ where
     pub fn send(&mut self, packet: Packet) -> Result<()> {
         packet.send(&mut self.serial)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::serial::test::TestSerial;
+    use crate::system::test::TestSystemInfo;
+    // use global_network::DefaultProtocol;
+    use crate::protocol::test::TestProtocol;
+
+    use super::*;
+
+    #[test]
+    fn test_find_distance_1_neighbor() {}
+
+    #[test]
+    fn test_get_global_coordinate_and_global_location() {
+        let locallocation = LocalNetworkLocation::UpLeft;
+        let coordinate = (1, 2);
+        let locallocation_cmp = LocalNetworkLocation::UpLeft;
+        let coordinate_cmp = (1, 2);
+
+        let serial = TestSerial::new();
+        let protocol = TestProtocol::new();
+        let systeminfo = TestSystemInfo::new(2);
+
+        let mut node = NetworkNode::new(serial, protocol, &systeminfo);
+
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation,
+                coordinate,
+                locallocation_cmp,
+                coordinate_cmp,
+            );
     }
 }

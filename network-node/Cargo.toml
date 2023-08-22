@@ -12,4 +12,6 @@ log = { version = "0.4.19", default-features = false }
 
 [dev-dependencies]
 pretty_assertions = "1"
-global-network = { path = "../global-network" }
+applications = {path = "../applications" }
+network-node = {path = "../network-node" }
+global-network = {path = "../global-network" }

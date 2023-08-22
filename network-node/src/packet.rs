@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use crate::serial::SerialTrait;
-use crate::utils::util::{self, is_same_localnet};
+use crate::utils::util::{self, is_neighbor_node_in_localnet, is_same_localnet};
 
 use super::flit::{Flit, FlitType, MAX_FLIT_LENGTH};
 use super::header::Header;
@@ -68,14 +68,17 @@ impl Packet {
         }
         Ok(())
     }
-    pub fn receive(serial: &mut dyn SerialTrait) -> Result<Option<Self>> {
+    pub fn receive(serial: &mut dyn SerialTrait, this_id: Id) -> Result<Option<Self>> {
         let mut flits = Vec::new();
         let flit = match Flit::receive(serial)? {
             Some(flit) => flit,
             None => return Ok(None),
         };
 
-        let (length_of_flit, _, _, _, _) = Flit::get_head_information(flit)?;
+        let (length_of_flit, _, src, _, _) = Flit::get_head_information(&flit)?;
+        if src == this_id {
+            return Ok(None);
+        }
 
         flits.push(flit);
 
@@ -94,14 +97,19 @@ impl Packet {
         to: ToId,
         mut messages: Vec<u8>,
     ) -> Self {
-        let checksum = Self::calculate_checksum(&messages);
         // checksum is 2 bytes and packet id is 2 bytes
 
         let length_of_flit = Self::calculate_length_of_flit(header, &messages);
 
-        for _ in 0..6 {
-            messages.push(0);
+        // end of file
+        if !header.is_only_head() {
+            messages.push(0xff);
+            for _ in 0..6 {
+                messages.push(0);
+            }
         }
+
+        let checksum = Self::calculate_checksum(&messages);
 
         Self {
             packet_id,
@@ -119,9 +127,9 @@ impl Packet {
         if header.is_only_head() {
             return 1;
         }
-        // headflit(1) + first_messages + messages / 6
+        // headflit(1) + first_messages + (len(messages) + eof(1)) / 6
         let mut length_of_flit = 2;
-        length_of_flit += (messages.len() + 5) / 6;
+        length_of_flit += (messages.len() + 1 + 5) / 6;
         length_of_flit
     }
 
@@ -181,7 +189,11 @@ impl Packet {
         let last = flits.len() - 1;
         Flit::change_flit_type(&mut flits[last], FlitType::Tail);
         if self.length_of_flit != flits.len() % MAX_FLIT_LENGTH as usize {
-            panic!("length of flit is not correct");
+            panic!(
+                "length of flit is not correct: {} != {}",
+                self.length_of_flit,
+                flits.len() % MAX_FLIT_LENGTH as usize
+            );
         }
 
         flits
@@ -200,7 +212,7 @@ impl Packet {
         return data;
     }
     fn load_first_message(flit: Flit) -> Result<(PacketId, u8, Id, Id)> {
-        let (_flittype, _flit_id, data) = Flit::get_body_or_tail_information(flit)?;
+        let (_flittype, _flit_id, data) = Flit::get_body_or_tail_information(&flit)?;
         let packet_id = data[0];
         let checksum = data[1];
         let to = Id::from_be_bytes([data[2], data[3]]);
@@ -212,7 +224,7 @@ impl Packet {
         if flits.len() == 0 {
             return Err(anyhow!("The length of flits is zero."));
         }
-        let (length_of_flit, header, from, to, packet_id) = Flit::get_head_information(flits[0])?;
+        let (length_of_flit, header, from, to, packet_id) = Flit::get_head_information(&flits[0])?;
         let to = ToId::from_id(to);
         let length_of_flit = length_of_flit.into();
 
@@ -232,7 +244,7 @@ impl Packet {
         let mut data = Vec::new();
 
         for i in 2..length_of_flit {
-            let (flittype, flit_id, message) = Flit::get_body_or_tail_information(flits[i])?;
+            let (flittype, flit_id, message) = Flit::get_body_or_tail_information(&flits[i])?;
             if flit_id as usize != i {
                 #[cfg(test)]
                 assert_eq!(flit_id as usize, i, "The flit id is not correct.");
@@ -247,7 +259,14 @@ impl Packet {
                 data.push(j);
             }
         }
+        while data.len() > 0 && data[data.len() - 1] != 0xff {
+            // remove padding
+            data.pop();
+        }
+
         if Self::check_checksum(&data, checksum) {
+            // remove end of message
+            data.pop();
             Ok(Self::new(
                 packet_id,
                 header,
@@ -302,6 +321,14 @@ impl Packet {
         this_coordinate: Option<Coordinate>,
     ) -> Result<Packet> {
         // if the source node is confirmed, coordinate is only one, which is the coordiate of source node.
+
+        if !is_same_localnet(source, destination) {
+            return Self::make_reply_for_request_confirmed_coordinate_packet_in_different_localnet(
+                source,
+                this_coordinate,
+            );
+        }
+
         let header = Header::ConfirmCoordinate;
         let packet_id = 0;
         let from = source;
@@ -310,20 +337,14 @@ impl Packet {
         let global_to = ToId::Broadcast;
         let mut messages = Vec::new();
 
-        if !is_same_localnet(source, destination) {
-            return Self::make_reply_for_request_confirmed_coordinate_packet_in_different_localnet(
-                source,
-                this_coordinate,
-            );
-        }
         let is_confirmed = this_coordinate.is_some();
         if is_confirmed {
             messages.push(0b11111111);
         } else {
             messages.push(0);
         }
-        for (_, i) in coordinate {
-            let id = source.to_be_bytes();
+        for (id, i) in coordinate {
+            let id = id.to_be_bytes();
             messages.push(id[0]);
             messages.push(id[1]);
             let x = i.0.to_be_bytes();
@@ -410,22 +431,28 @@ impl Packet {
         // data is like this [ is_confirmed(8) | id(16) | x(16) | y(16) | id(16)...]
 
         let messages = self.get_ref_messages();
+        let length = self.get_real_messages_length();
         // id size + x size + y size
         const UNIT_BYTE: usize =
             (size_of::<CoordinateComponent>() * 2 + size_of::<Id>()) / size_of::<u8>();
         // messages length is 1(is_confirmed section) + 6 * n
-        if (messages.len() - 1) % UNIT_BYTE != 0 {
-            panic!("length of message is not correct");
+        if (length - 1) % UNIT_BYTE != 0 {
+            panic!(
+                "length of message is not correct: length = {}, messages = {:?}",
+                length, messages
+            );
         }
         let is_confirmed = messages[0] != 0;
-
-        // confirmed and source_id is in the same localnet
-        if is_confirmed && !util::is_same_localnet(self.get_global_from(), source_id) {
+        if !is_confirmed && !is_neighbor_node_in_localnet(self.global_from, source_id) {
             return Ok(Vec::new());
         }
 
+        // confirmed and source_id is in the same localnet
+        // if is_confirmed && util::is_same_localnet(self.get_global_from(), source_id) {
+        //     return Ok(Vec::new());
+        // }
         let mut coordinates = Vec::new();
-        for i in (1..messages.len()).step_by(6) {
+        for i in (1..length).step_by(UNIT_BYTE) {
             let id = Id::from_be_bytes([messages[i], messages[i + 1]]);
             let x = CoordinateComponent::from_be_bytes([messages[i + 2], messages[i + 3]]);
             let y = CoordinateComponent::from_be_bytes([messages[i + 4], messages[i + 5]]);
@@ -442,6 +469,17 @@ impl Packet {
     // Packet Utils
     // ///////////////////////////////
     //
+    pub fn get_real_messages_length(&self) -> usize {
+        let mut length = 0;
+        for (i, m) in self.messages.iter().enumerate() {
+            // find the last 0xff(eof)
+            if m == &0xff {
+                // last item is the item just before eof
+                length = i;
+            }
+        }
+        length
+    }
 
     // ///////////////////////////////
     // getter
@@ -508,7 +546,9 @@ mod test {
             let flits = packet.to_flits();
             println!("checksum: {}", packet.checksum);
             println!("flits: {:?}", flits);
+
             let mut trans_packet = Packet::from_flits(flits).unwrap();
+            println!("trans_packet: {:?}", trans_packet);
             assert!(trans_packet.messages.len() >= packet.messages.len());
             for i in 0..packet.messages.len() {
                 assert_eq!(
@@ -523,7 +563,8 @@ mod test {
             trans_packet.messages = packet.messages.clone();
             assert_eq!(packet, trans_packet);
         }
-        packet_test(packet, 28);
+
+        packet_test(packet, 28_u8.wrapping_add(255_u8));
 
         // second, only head flit: in H{hoge} header, from and to is the same as global_from and global_to, and packet data is empty.
         let packet_data = [].to_vec();
@@ -549,7 +590,25 @@ mod test {
             ToId::Unicast(4),
             packet_data,
         );
-        packet_test(packet, 186);
+        packet_test(packet, 186_u8.wrapping_add(255_u8));
+    }
+
+    #[test]
+    fn test_flits_length() {
+        let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
+        let packet = Packet::new(
+            0,
+            Header::ConfirmCoordinate,
+            2,
+            ToId::Broadcast,
+            4,
+            ToId::Broadcast,
+            packet_data,
+        );
+
+        let flits = packet.to_flits();
+        let result = Packet::from_flits(flits);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -569,7 +628,7 @@ mod test {
         println!("bytes: {:?}", bytes);
         println!("flit: {:064b}", u64::from_be_bytes(flit.to_be_bytes()));
         assert_eq!(bytes[0], 0b00000000, "packet id is not correct");
-        assert_eq!(bytes[1], 28, "checksum is not correct");
+        assert_eq!(bytes[1], 28_u8.wrapping_add(255), "checksum is not correct");
         assert_eq!(bytes[2], 0xFF, "to id is not correct");
         assert_eq!(bytes[3], 0xFF, "to id is not correct");
         assert_eq!(bytes[4], 0x0, "from id is not correct");
@@ -577,7 +636,7 @@ mod test {
 
         let (packet_id, checksum, from, to) = Packet::load_first_message(flit).unwrap();
         assert_eq!(packet_id, 0, "packet id is not correct");
-        assert_eq!(checksum, 28, "checksum is not correct");
+        assert_eq!(checksum, 28_u8.wrapping_add(255), "checksum is not correct");
         assert_eq!(from, 0, "from id is not correct");
         assert_eq!(to, 0xFFFF, "to id is not correct");
     }
@@ -592,19 +651,19 @@ mod test {
     #[test]
     fn test_send() {
         let mut serial = TestSerial::new();
-        let packet_data = [0, 1, 2, 3, 4, 5, 6, 7].to_vec();
+        let packet_data = [].to_vec();
         let packet = Packet::new(
-            0,
+            1,
             Header::HCheckConnection,
-            0,
+            5,
             ToId::Broadcast,
-            0,
+            5,
             ToId::Broadcast,
             packet_data,
         );
         packet.send(&mut serial).expect("failed to send packet");
 
-        let received = match Packet::receive(&mut serial).expect("failed to receive packet") {
+        let received = match Packet::receive(&mut serial, 4).expect("failed to receive packet") {
             Some(packet) => packet,
             None => panic!("failed to receive packet"),
         };
@@ -612,8 +671,25 @@ mod test {
     }
     #[test]
     fn test_request_confirmed_coordinate_packet() {
-        todo!("test reply_for_request_coordinate_packet");
-        todo!("test reply_for_request_confirmed_coordinate_packet");
-        todo!("test reply_for_request_confirmed_coordinate_packet in different localnet");
+        let packet = Packet::make_request_confirmed_coordinate_packet(3);
+        assert_eq!(packet.header, Header::HRequestConfirmedCoordinate);
+        assert_eq!(packet.from, 3);
+        assert_eq!(packet.to, ToId::Broadcast);
+        assert_eq!(packet.messages, vec![]);
+
+        let coordinate = (1, 2);
+        let packet =
+            Packet::make_reply_for_request_confirmed_coordinate_packet_in_different_localnet(
+                3,
+                Some(coordinate),
+            )
+            .unwrap();
+        assert_eq!(packet.header, Header::ConfirmCoordinate);
+        assert_eq!(packet.from, 3);
+        assert_eq!(packet.to, ToId::Broadcast);
+        println!("packet.messages: {:?}", packet.messages);
+        let messages = packet.load_confirmed_coordinate_packet(10).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0], (3, coordinate));
     }
 }

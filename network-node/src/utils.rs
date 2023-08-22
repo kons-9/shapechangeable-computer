@@ -72,6 +72,41 @@ pub mod util {
     pub fn is_same_localnet(id1: Id, id2: Id) -> bool {
         get_localnet_id(id1) == get_localnet_id(id2)
     }
+    pub fn is_neighbor_node_in_localnet(id1: Id, id2: Id) -> bool {
+        if !is_same_localnet(id1, id2) {
+            return false;
+        }
+
+        let location1 = get_localnet_location(id1);
+        let location2 = get_localnet_location(id2);
+
+        match location1 {
+            LocalNetworkLocation::UpLeft => match location2 {
+                LocalNetworkLocation::UpLeft => false,
+                LocalNetworkLocation::UpRight => true,
+                LocalNetworkLocation::DownLeft => true,
+                LocalNetworkLocation::DownRight => false,
+            },
+            LocalNetworkLocation::UpRight => match location2 {
+                LocalNetworkLocation::UpLeft => true,
+                LocalNetworkLocation::UpRight => false,
+                LocalNetworkLocation::DownLeft => false,
+                LocalNetworkLocation::DownRight => true,
+            },
+            LocalNetworkLocation::DownLeft => match location2 {
+                LocalNetworkLocation::UpLeft => true,
+                LocalNetworkLocation::UpRight => false,
+                LocalNetworkLocation::DownLeft => false,
+                LocalNetworkLocation::DownRight => true,
+            },
+            LocalNetworkLocation::DownRight => match location2 {
+                LocalNetworkLocation::UpLeft => false,
+                LocalNetworkLocation::UpRight => true,
+                LocalNetworkLocation::DownLeft => true,
+                LocalNetworkLocation::DownRight => false,
+            },
+        }
+    }
     pub fn calculate_l0_distance(coordinate1: Coordinate, coordinate2: Coordinate) -> u16 {
         let (x1, y1) = coordinate1;
         let (x2, y2) = coordinate2;

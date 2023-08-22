@@ -42,16 +42,28 @@ impl Header {
         match self {
             Header::Data
             | Header::GeneralAck
-            | Header::ConfirmCoordinate
             | Header::SendParentId
             | Header::ReceiveParentId
             | Header::SendChildId
             | Header::ReceiveChildId
+            | Header::ConfirmCoordinate
             | Header::Error => false,
             Header::HAck | Header::HRequestConfirmedCoordinate | Header::HCheckConnection => true,
         }
     }
     pub fn is_require_ack(&self) -> bool {
-        !self.is_only_head()
+        match self {
+            Header::Data
+            | Header::GeneralAck
+            | Header::SendParentId
+            | Header::ReceiveParentId
+            | Header::SendChildId
+            | Header::ReceiveChildId
+            | Header::Error => true,
+            Header::HAck
+            | Header::HRequestConfirmedCoordinate
+            | Header::HCheckConnection
+            | Header::ConfirmCoordinate => false,
+        }
     }
 }
