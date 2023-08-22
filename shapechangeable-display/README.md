@@ -37,6 +37,7 @@ General packet, which means the packet have body and tail flit, has packetid, gl
 :--:|:--:|:--:|:--:|:--:
 
 This means first body flit doesn't have any messages.
+The data section must finish with `0bFF0*`. In other words, the last `FF` represents eof.
 
 ## Network Protocol
 Network Protocol must implement `network::protocol::Protocol` trait.

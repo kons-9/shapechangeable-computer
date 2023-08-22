@@ -104,15 +104,15 @@ fn main() -> Result<()> {
         };
 
         let from = packet.get_global_from();
-        if util::is_same_localnet(from, network.get_ip_address()) {
-            continue;
-        }
-        flag = true;
-        display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
-        display.print(format!("src: {:?}", from).as_str(), true);
 
         match packet.get_header() {
             Header::HCheckConnection => {
+                if util::is_same_localnet(from, network.get_ip_address()) {
+                    continue;
+                }
+                flag = true;
+                display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
+                display.print(format!("src: {:?}", from).as_str(), true);
                 network.send(Packet::make_check_connection_packet(
                     network.get_ip_address(),
                 ))?;
@@ -121,6 +121,9 @@ fn main() -> Result<()> {
                 let id = network.get_ip_address() as u16;
                 let x = network.get_coordinate().0 as u16;
                 let y = network.get_coordinate().1 as u16;
+                flag = true;
+                display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
+                display.print(format!("src: {:?}", from).as_str(), true);
 
                 let data = [
                     0b11111111 as u8,

@@ -81,6 +81,7 @@ impl SerialTrait for Serial<'_> {
             self.flush_read()?;
             return Ok(None);
         }
+        info!("receive by serial: {:?}", buffer);
         Ok(Some(buffer))
     }
     /// flush read buffer
