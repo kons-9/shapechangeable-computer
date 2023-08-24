@@ -381,7 +381,11 @@ impl Packet {
             let y = CoordinateComponent::from_be_bytes([messages[i + 4], messages[i + 5]]);
             coordinates.push((id, (x, y)));
         }
-        if is_confirmed && coordinates.len() != 1 {
+        // if the packet is sent by outer node, it must consist of one coordinate.
+        if is_confirmed
+            && coordinates.len() != 1
+            && !is_same_localnet(source_id, self.get_global_from())
+        {
             return Err(anyhow!(
                 "This node is confirmed but the number of coordinate is not 1."
             ));
@@ -481,13 +485,16 @@ impl Packet {
         ];
 
         let offset = match this_global_location {
-            LocalNetworkLocation::UpLeft => (0, 0),
+            LocalNetworkLocation::DownLeft => (0, 0),
             LocalNetworkLocation::UpRight => (1, 1),
-            LocalNetworkLocation::DownLeft => (0, 1),
+            LocalNetworkLocation::UpLeft => (0, 1),
             LocalNetworkLocation::DownRight => (1, 0),
         };
         for (global_location, coordinate) in base_coordinate {
-            let coordinate = (coordinate.0 - offset.0, coordinate.1 - offset.1);
+            let coordinate = (
+                this_coordinate.0 + coordinate.0 - offset.0,
+                this_coordinate.1 + coordinate.1 - offset.1,
+            );
             let local_location = global_location + diff;
             let raw_localnet_id = util::get_raw_localnet_id(source);
             let raw_is_root = util::get_raw_root(source);
@@ -767,5 +774,39 @@ mod test {
         let messages = packet.load_confirmed_coordinate_packet(10).unwrap();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0], (3, coordinate));
+    }
+
+    #[test]
+    fn test_make_localnet_coordinates() {
+        let mut id = 0;
+        util::set_raw_is_root(&mut id, false);
+        util::set_raw_localnet_id(&mut id, 5);
+        util::set_raw_localnet_location(&mut id, LocalNetworkLocation::UpLeft);
+        let coordinates =
+            Packet::make_localnet_coordinates(id, (2, 1), LocalNetworkLocation::UpLeft);
+        assert_eq!(coordinates.len(), 4);
+        let copy = coordinates.clone();
+        for (from, cid, coordinate) in copy {
+            assert_eq!(from, cid);
+            let mut nid = cid;
+            util::set_raw_localnet_location(&mut nid, LocalNetworkLocation::UpLeft);
+            assert_eq!(nid, id);
+            let localnetlocation = util::get_localnet_location(cid);
+            match localnetlocation {
+                LocalNetworkLocation::UpLeft => {
+                    assert_eq!(coordinate, (2, 1), "coordinates: {:?}", coordinates)
+                }
+                LocalNetworkLocation::UpRight => {
+                    assert_eq!(coordinate, (3, 1), "coordinates: {:?}", coordinates)
+                }
+                LocalNetworkLocation::DownLeft => {
+                    assert_eq!(coordinate, (2, 0), "coordinates: {:?}", coordinates)
+                }
+                LocalNetworkLocation::DownRight => {
+                    assert_eq!(coordinate, (3, 0), "coordinates: {:?}", coordinates)
+                }
+            }
+        }
+        // todo: add more test
     }
 }

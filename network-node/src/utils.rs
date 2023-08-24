@@ -41,6 +41,20 @@ pub mod util {
     pub fn get_raw_root(id: Id) -> u16 {
         id & ROOT_MASK
     }
+    pub fn set_raw_localnet_location(id: &mut Id, localnet_location: LocalNetworkLocation) {
+        let location: Id = localnet_location.into();
+        *id = (*id & !LOCALNET_LOCATION_MASK) | location;
+    }
+    pub fn set_raw_localnet_id(id: &mut Id, localnet_id: u16) {
+        *id = (*id & !LOCALNET_ID_MASK) | ((localnet_id) << LOCALNET_ID_SHIFT)
+    }
+    pub fn set_raw_is_root(id: &mut Id, is_root: bool) {
+        let root: Id = if is_root { ROOT } else { 0 };
+        *id = (*id & !ROOT_MASK) | root
+    }
+    pub fn set_raw_mac_address(id: &mut Id, mac_address: u16) {
+        *id = (*id & !MAC_ADDRESS_MASK) | ((mac_address) << MAC_ADDRESS_SHIFT);
+    }
 
     // convenient value of efuse
     pub fn get_localnet_id(id: Id) -> u16 {
