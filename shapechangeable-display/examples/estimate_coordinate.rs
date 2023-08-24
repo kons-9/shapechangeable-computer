@@ -66,8 +66,12 @@ fn main() -> Result<()> {
 
     let coordinate = network.get_coordinate();
     let coordinate_str = format!("(x,y): ({}, {})", coordinate.0, coordinate.1);
+    let global_location = network.get_global_location();
+    let global_location_str = format!("gl: {:?}", global_location);
+
     display.print("network initialized", true);
     display.print(&coordinate_str, true);
+    display.print(&global_location_str, true);
     display.print("estimation is done.", true);
     display.print("waiting for network connection...", true);
 

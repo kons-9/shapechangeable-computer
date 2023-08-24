@@ -163,6 +163,7 @@ where
             }
             break;
         }
+        info!("confirming coordinate...");
 
         let (coordinate, global_location) =
             Self::coordinate_and_global_location_from_neighbor_confirmed(
@@ -243,6 +244,8 @@ where
             Self::find_distance_1_neighbor(neighbor_confirmed)
                 .expect("failed to find distance 1 neighbor");
 
+        // node that id and id_cmp is not in the same localnet. and node that id is directly
+        // connected to this node (but id_cmp is not).
         let (id, coordinate, id_cmp, coordinate_cmp) = if is_same_localnet(this_id, from_id) {
             // swap
             (id_cmp, coordinate_cmp, id, coordinate)
@@ -255,9 +258,6 @@ where
                 , id, coordinate, id_cmp, coordinate_cmp
             ));
         };
-
-        // node that id and id_cmp is not in the same localnet. and node that id is directly
-        // connected to this node (but id_cmp is not).
 
         if is_same_localnet(this_id, id) || is_same_localnet(this_id, id_cmp) {
             return Err(anyhow!(
@@ -279,6 +279,7 @@ where
             ),
         );
     }
+
     fn get_coordinate_from_confirmed_localnet_node(
         localnet_confirmed: &Vec<&(Id, Id, Coordinate)>,
         this_id: Id,
@@ -296,18 +297,18 @@ where
         };
 
         // is there any node that have bigger x coordinate than this node?
-        let is_bigger_x = localnet_confirmed
+        let is_any_bigger_x = localnet_confirmed
             .iter()
             .any(|(_, _, coordinate)| coordinate.0 > this_coordinate.0);
         // y?
-        let is_bigger_y = localnet_confirmed
+        let is_any_bigger_y = localnet_confirmed
             .iter()
             .any(|(_, _, coordinate)| coordinate.1 > this_coordinate.1);
-        let location = match (is_bigger_x, is_bigger_y) {
-            (true, true) => LocalNetworkLocation::UpRight,
+        let location = match (is_any_bigger_x, is_any_bigger_y) {
+            (true, true) => LocalNetworkLocation::DownLeft,
             (true, false) => LocalNetworkLocation::UpLeft,
             (false, true) => LocalNetworkLocation::DownRight,
-            (false, false) => LocalNetworkLocation::DownLeft,
+            (false, false) => LocalNetworkLocation::UpRight,
         };
         Ok((this_coordinate, location))
     }
