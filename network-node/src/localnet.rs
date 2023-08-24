@@ -1,5 +1,7 @@
 // use crate::efuse::Efuse;
 
+use std::ops::{Add, Sub};
+
 use crate::system::SystemInfo;
 use crate::utils::{
     type_alias::{Coordinate, Id},
@@ -9,10 +11,10 @@ use crate::utils::{
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LocalNetworkLocation {
-    UpLeft,
-    UpRight,
-    DownLeft,
-    DownRight,
+    UpLeft = 0,
+    UpRight = 1,
+    DownRight = 2,
+    DownLeft = 3,
 }
 
 impl LocalNetworkLocation {
@@ -77,6 +79,31 @@ impl From<Id> for LocalNetworkLocation {
             LOCALNET_DOWNLEFT => LocalNetworkLocation::DownLeft,
             LOCALNET_DOWNRIGHT => LocalNetworkLocation::DownRight,
             _ => panic!("Invalid localnet: localnet is less than 5, but {}", value),
+        }
+    }
+}
+
+// this operation is for estimation of coordinate.
+impl Sub for LocalNetworkLocation {
+    type Output = Id;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let rhs = rhs as Id;
+        let lhs = self as Id;
+        lhs - rhs
+    }
+}
+impl Add<Id> for LocalNetworkLocation {
+    type Output = LocalNetworkLocation;
+    fn add(self, rhs: Id) -> Self::Output {
+        let rhs = rhs as Id;
+        let lhs = self as Id;
+        let result = lhs + rhs;
+        match result % 4 {
+            0 => LocalNetworkLocation::UpLeft,
+            1 => LocalNetworkLocation::UpRight,
+            2 => LocalNetworkLocation::DownRight,
+            3 => LocalNetworkLocation::DownLeft,
+            _ => unreachable!(),
         }
     }
 }
