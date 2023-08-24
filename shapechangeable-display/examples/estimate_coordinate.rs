@@ -118,32 +118,15 @@ fn main() -> Result<()> {
                 ))?;
             }
             Header::HRequestConfirmedCoordinate => {
-                let id = network.get_ip_address() as u16;
-                let x = network.get_coordinate().0 as u16;
-                let y = network.get_coordinate().1 as u16;
-                flag = true;
-                display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
-                display.print(format!("src: {:?}", from).as_str(), true);
+                let packet = Packet::make_confirm_coordinate_packet_by_confirmed_node(
+                    network.get_ip_address(),
+                    from,
+                    network.get_coordinate(),
+                    network.get_global_location(),
+                )
+                .unwrap();
 
-                let data = [
-                    0b11111111 as u8,
-                    (id >> 8) as u8,
-                    (id & 0xff) as u8,
-                    (x >> 8) as u8,
-                    (x & 0xff) as u8,
-                    (y >> 8) as u8,
-                    (y & 0xff) as u8,
-                ]
-                .to_vec();
-                network.send(Packet::new(
-                    0,
-                    Header::ConfirmCoordinate,
-                    network.get_ip_address(),
-                    network_node::packet::ToId::Broadcast,
-                    network.get_ip_address(),
-                    network_node::packet::ToId::Broadcast,
-                    data,
-                ))?;
+                network.send(packet)?;
             }
             _ => {
                 println!("received packet: {:?}", packet);
