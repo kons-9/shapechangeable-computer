@@ -90,24 +90,27 @@ where
         let ip_address = localnet.get_mac_address();
 
         // not root, so need to connect other nodes(units).
-        let mut neighbor_confirmed: Vec<(Id, Coordinate)> = Vec::new();
+
+        // (node that send the coordinate, node that has the coordinate, coordinate)
+        // if the information is send by confirmed node in non-localnet, first and second node is same.
+        let mut neighbor_confirmed: Vec<(Id, Id, Coordinate)> = Vec::new();
 
         'outer: loop {
-            loop {
-                match Self::check_connection(&mut serial, ip_address) {
-                    Ok(true) => break,
-                    Ok(false) => {
-                        info!("connection is not exist");
-                    }
-                    Err(e) => {
-                        println!("error: {:?}", e);
-                        serial.flush_all()?;
-                    }
-                }
-                std::thread::sleep(Duration::from_millis(3000));
-                continue;
-            }
-            info!("confirmed connection with other nodes");
+            // loop {
+            //     match Self::check_connection(&mut serial, ip_address) {
+            //         Ok(true) => break,
+            //         Ok(false) => {
+            //             info!("connection is not exist");
+            //         }
+            //         Err(e) => {
+            //             println!("error: {:?}", e);
+            //             serial.flush_all()?;
+            //         }
+            //     }
+            //     std::thread::sleep(Duration::from_millis(3000));
+            //     continue;
+            // }
+            // info!("confirmed connection with other nodes");
 
             while !Self::is_ready(&neighbor_confirmed, ip_address)? {
                 // send broadcast packet
@@ -161,6 +164,7 @@ where
             }
             break;
         }
+        info!("confirming coordinate...");
 
         let (coordinate, global_location) =
             Self::coordinate_and_global_location_from_neighbor_confirmed(
@@ -190,28 +194,31 @@ where
         serial: &mut S,
         node_id: Id,
         received_packet: Packet,
-        neighbor_confirmed: &mut Vec<(Id, Coordinate)>,
+        neighbor_confirmed: &mut Vec<(Id, Id, Coordinate)>,
     ) -> Result<bool> {
         match received_packet.get_header() {
             Header::ConfirmCoordinate => {
                 // if received packed source node is in the same localnet of this node,
                 let coordinates = received_packet.load_confirmed_coordinate_packet(node_id)?;
+                let from_id = received_packet.get_global_from();
 
-                for coordinate in coordinates {
-                    if !neighbor_confirmed.contains(&coordinate) {
-                        neighbor_confirmed.push(coordinate);
+                for (coordinate_id, coordinate) in coordinates {
+                    let item = (from_id, coordinate_id, coordinate);
+                    if !neighbor_confirmed.contains(&item) {
+                        neighbor_confirmed.push(item);
                     }
                 }
                 return Ok(true);
             }
             Header::HRequestConfirmedCoordinate => {
                 if neighbor_confirmed.len() != 0 {
-                    let packet = Packet::make_reply_for_request_confirmed_coordinate_packet(
+                    let packet = Packet::make_confirm_coordinate_packet(
                         node_id,
                         received_packet.get_global_from(),
                         neighbor_confirmed,
-                        None,
-                    )?;
+                    )
+                    .expect("failed to make confirm coordinate packet: packet is none");
+
                     packet.send(serial)?;
                 }
                 Ok(true)
@@ -221,20 +228,49 @@ where
     }
 
     fn coordinate_and_global_location_from_neighbor_confirmed(
-        neighbor_confirmed: &Vec<(Id, Coordinate)>,
+        neighbor_confirmed: &Vec<(Id, Id, Coordinate)>,
         this_id: Id,
     ) -> Result<(Coordinate, LocalNetworkLocation)> {
-        let (coordinate, id_cmp, coordinate_cmp) =
-            match Self::find_distance_1_neighbor(neighbor_confirmed) {
-                Some((_, coordinate, id_cmp, coordinate_cmp)) => {
-                    (coordinate, id_cmp, coordinate_cmp)
-                }
-                None => {
-                    return Err(anyhow::anyhow!("not found distance 1 neighbor"));
-                }
-            };
-        let location = LocalNetworkLocation::from_id(this_id);
+        // check if other node in localnet is already confirmed
+        let same_localnet: Vec<&(Id, Id, Coordinate)> = neighbor_confirmed
+            .iter()
+            .filter(|(_, id, _)| is_same_localnet(this_id, *id))
+            .collect();
+        if same_localnet.len() > 0 {
+            assert_eq!(same_localnet.len(), 4);
+            return Self::get_coordinate_from_confirmed_localnet_node(&same_localnet, this_id);
+        }
+
+        let (from_id, id, coordinate, from_id_cmp, id_cmp, coordinate_cmp) =
+            Self::find_distance_1_neighbor(neighbor_confirmed)
+                .expect("failed to find distance 1 neighbor");
+
+        // node that id and id_cmp is not in the same localnet. and node that id is directly
+        // connected to this node (but id_cmp is not).
+        let (id, coordinate, id_cmp, coordinate_cmp) = if is_same_localnet(this_id, from_id) {
+            // swap
+            (id_cmp, coordinate_cmp, id, coordinate)
+        } else if is_same_localnet(this_id, from_id_cmp) {
+            (id, coordinate, id_cmp, coordinate_cmp)
+        } else {
+            return Err(anyhow!(
+                "invalid this_id must be the same node as from_id or from_id_cmp: neighbor_confirmed {:?}, (id, coordinate, id_cmp, coordinate_cmp) = ({}, {:?}, {}, {:?})",
+                neighbor_confirmed
+                , id, coordinate, id_cmp, coordinate_cmp
+            ));
+        };
+
+        if is_same_localnet(this_id, id) || is_same_localnet(this_id, id_cmp) {
+            return Err(anyhow!(
+                "invalid this_id cannot be the same node as id and id_cmp: neighbor_confirmed {:?}, (id, coordinate, id_cmp, coordinate_cmp) = ({}, {:?}, {}, {:?})",
+                neighbor_confirmed
+                , id, coordinate, id_cmp, coordinate_cmp
+            ));
+        }
+
+        let location = LocalNetworkLocation::from_id(id);
         let location_cmp = LocalNetworkLocation::from_id(id_cmp);
+
         return Ok(
             Self::get_global_coordinate_and_global_location_from_local_location(
                 location,
@@ -244,6 +280,43 @@ where
             ),
         );
     }
+
+    fn get_coordinate_from_confirmed_localnet_node(
+        localnet_confirmed: &Vec<&(Id, Id, Coordinate)>,
+        this_id: Id,
+    ) -> Result<(Coordinate, LocalNetworkLocation)> {
+        let this_coordinate = localnet_confirmed.iter().find(|(_, id, _)| *id == this_id);
+        let this_coordinate = match this_coordinate {
+            Some((_, _, coordinate)) => *coordinate,
+            None => {
+                return Err(anyhow!(
+                    "failed to find this node coordinate from localnet_confirmed: localnet_confirmed {:?}, this_id {}",
+                    localnet_confirmed
+                    , this_id
+                ));
+            }
+        };
+
+        // is there any node that have bigger x coordinate than this node?
+        let is_any_bigger_x = localnet_confirmed
+            .iter()
+            .any(|(_, _, coordinate)| coordinate.0 > this_coordinate.0);
+        // y?
+        let is_any_bigger_y = localnet_confirmed
+            .iter()
+            .any(|(_, _, coordinate)| coordinate.1 > this_coordinate.1);
+        let location = match (is_any_bigger_x, is_any_bigger_y) {
+            (true, true) => LocalNetworkLocation::DownLeft,
+            (true, false) => LocalNetworkLocation::UpLeft,
+            (false, true) => LocalNetworkLocation::DownRight,
+            (false, false) => LocalNetworkLocation::UpRight,
+        };
+        Ok((this_coordinate, location))
+    }
+    /// not cmp node is directly connected to this node but not in localnet.
+    /// cmp node is not directly connected to this node and not in localnet.
+    /// not cmp node and cmp node is directly connected.
+    /// return this coordinate and this global location.
     fn get_global_coordinate_and_global_location_from_local_location(
         local_location: LocalNetworkLocation,
         coordinate: Coordinate,
@@ -255,7 +328,7 @@ where
         } else if local_location.rotate_counterclockwise() == local_location_cmp {
             false
         } else {
-            unreachable!();
+            panic!("invalid local_location and local_location_cmp: local_location = {:?}, local_location_cmp = {:?}, local_location.rotate_clockwise = {:?}, local_location.rotate_counterclockwise = {:?}", local_location, local_location_cmp, local_location.rotate_clockwise(), local_location.rotate_counterclockwise());
         };
         const X: bool = true;
         const Y: bool = false;
@@ -277,31 +350,31 @@ where
             different_coordinate,
             is_small_coordinate,
         ) {
-            (true, X, true) => (add_y(coordinate, -1), LocalNetworkLocation::UpLeft),
-            (true, X, false) => (add_y(coordinate, 1), LocalNetworkLocation::DownRight),
-            (true, Y, true) => (add_x(coordinate, 1), LocalNetworkLocation::DownLeft),
-            (true, Y, false) => (add_x(coordinate, -1), LocalNetworkLocation::UpRight),
-            (false, X, true) => (add_y(coordinate, -1), LocalNetworkLocation::UpRight),
-            (false, X, false) => (add_y(coordinate, 1), LocalNetworkLocation::DownLeft),
-            (false, Y, true) => (add_x(coordinate, -1), LocalNetworkLocation::DownRight),
-            (false, Y, false) => (add_x(coordinate, 1), LocalNetworkLocation::UpLeft),
+            (true, X, true) => (add_y(coordinate, 1), LocalNetworkLocation::DownLeft),
+            (true, X, false) => (add_y(coordinate, -1), LocalNetworkLocation::UpRight),
+            (true, Y, true) => (add_x(coordinate, -1), LocalNetworkLocation::DownRight),
+            (true, Y, false) => (add_x(coordinate, 1), LocalNetworkLocation::UpLeft),
+            (false, X, true) => (add_y(coordinate, -1), LocalNetworkLocation::UpLeft),
+            (false, X, false) => (add_y(coordinate, 1), LocalNetworkLocation::DownRight),
+            (false, Y, true) => (add_x(coordinate, 1), LocalNetworkLocation::DownLeft),
+            (false, Y, false) => (add_x(coordinate, -1), LocalNetworkLocation::UpRight),
         }
     }
 
     /// find distance 1 neighbor from neighbor_confirmed
     /// distance is calculated by L0 distance
-    /// return (id, coordinate, id_cmp, coordinate_cmp)
+    /// return (from_id, id, coordinate, from_id_cmp, id_cmp, coordinate_cmp)
     fn find_distance_1_neighbor(
-        neighbor_confirmed: &Vec<(Id, Coordinate)>,
-    ) -> Option<(Id, Coordinate, Id, Coordinate)> {
+        neighbor_confirmed: &Vec<(Id, Id, Coordinate)>,
+    ) -> Option<(Id, Id, Coordinate, Id, Id, Coordinate)> {
         for i in 0..neighbor_confirmed.len() {
-            let (id, coordinate) = neighbor_confirmed[i];
+            let (from_id, id, coordinate) = neighbor_confirmed[i];
             for j in i + 1..neighbor_confirmed.len() {
-                let (id_cmp, coordinate_cmp) = neighbor_confirmed[j];
+                let (from_id_cmp, id_cmp, coordinate_cmp) = neighbor_confirmed[j];
                 // calculate distance between coordinate and coordinate_cmp
                 let distance = calculate_l0_distance(coordinate, coordinate_cmp);
                 if distance == 1 {
-                    return Some((id, coordinate, id_cmp, coordinate_cmp));
+                    return Some((from_id, id, coordinate, from_id_cmp, id_cmp, coordinate_cmp));
                 }
             }
         }
@@ -313,7 +386,7 @@ where
     }
 
     /// check connection with other nodes that is not in the same local network.
-    fn check_connection(serial: &mut S, node_id: Id) -> Result<bool> {
+    pub fn check_connection(serial: &mut S, node_id: Id) -> Result<bool> {
         info!("making check connection packet");
         let packet = Packet::make_check_connection_packet(node_id);
         packet.send(serial)?;
@@ -345,19 +418,16 @@ where
     /// Firstly, send broadcast flit and receive coordinate of neighbor nodes.
     /// Secondly, periodically send flit to neighbor which is in localnet,
     /// and check whether it has received flit of coordinate from neighbor which is not in localnet.
-    fn is_ready(neighbor_confirmed: &Vec<(Id, Coordinate)>, this_id: Id) -> Result<bool> {
+    fn is_ready(neighbor_confirmed: &Vec<(Id, Id, Coordinate)>, this_id: Id) -> Result<bool> {
         // abviously, not enough
         if neighbor_confirmed.len() < 1 {
             return Ok(false);
         }
 
         // check whether there is a node that is not in the same local network.
-        for (id, _) in neighbor_confirmed.iter() {
+        for (id, _, _) in neighbor_confirmed.iter() {
             if *id == this_id {
-                panic!("software bug: the same id is exist in neighbor_confirmed: neighbor_confirmed: {:?}", neighbor_confirmed);
-                // return Err(anyhow!(
-                //     "software bug: the same id is exist in neighbor_confirmed: neighbor_confirmed: {:?}", neighbor_confirmed,
-                // ));
+                return Ok(true);
             }
         }
 
@@ -486,7 +556,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::serial::test::TestSerial;
-    use crate::system::test::TestSystemInfo;
+    // use crate::system::test::TestSystemInfo;
     // use global_network::DefaultProtocol;
     use crate::protocol::test::TestProtocol;
 
@@ -497,16 +567,10 @@ mod test {
 
     #[test]
     fn test_get_global_coordinate_and_global_location() {
-        let locallocation = LocalNetworkLocation::UpLeft;
-        let coordinate = (1, 2);
-        let locallocation_cmp = LocalNetworkLocation::UpLeft;
-        let coordinate_cmp = (1, 2);
-
-        let serial = TestSerial::new();
-        let protocol = TestProtocol::new();
-        let systeminfo = TestSystemInfo::new(2);
-
-        let mut node = NetworkNode::new(serial, protocol, &systeminfo);
+        let locallocation = LocalNetworkLocation::DownRight;
+        let coordinate = (1, 0);
+        let locallocation_cmp = LocalNetworkLocation::UpRight;
+        let coordinate_cmp = (1, 1);
 
         let get_global_coordinate =
             NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
@@ -515,5 +579,108 @@ mod test {
                 locallocation_cmp,
                 coordinate_cmp,
             );
+        assert_eq!(
+            get_global_coordinate,
+            ((2, 0), LocalNetworkLocation::DownLeft)
+        );
+
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation_cmp,
+                coordinate_cmp,
+                locallocation,
+                coordinate,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((2, 1), LocalNetworkLocation::UpLeft)
+        );
+
+        // second
+        let locallocation = LocalNetworkLocation::UpRight;
+        let coordinate = (1, 1);
+        let locallocation_cmp = LocalNetworkLocation::UpLeft;
+        let coordinate_cmp = (0, 1);
+
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation,
+                coordinate,
+                locallocation_cmp,
+                coordinate_cmp,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((1, 2), LocalNetworkLocation::DownRight)
+        );
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation_cmp,
+                coordinate_cmp,
+                locallocation,
+                coordinate,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((0, 2), LocalNetworkLocation::DownLeft)
+        );
+
+        // third
+        let locallocation = LocalNetworkLocation::DownLeft;
+        let coordinate = (0, 0);
+        let locallocation_cmp = LocalNetworkLocation::UpLeft;
+        let coordinate_cmp = (0, 1);
+
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation,
+                coordinate,
+                locallocation_cmp,
+                coordinate_cmp,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((-1, 0), LocalNetworkLocation::DownRight)
+        );
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation_cmp,
+                coordinate_cmp,
+                locallocation,
+                coordinate,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((-1, 1), LocalNetworkLocation::UpRight)
+        );
+
+        // fourth
+        let locallocation = LocalNetworkLocation::DownLeft;
+        let coordinate = (0, 0);
+        let locallocation_cmp = LocalNetworkLocation::DownRight;
+        let coordinate_cmp = (1, 0);
+
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation,
+                coordinate,
+                locallocation_cmp,
+                coordinate_cmp,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((0, -1), LocalNetworkLocation::UpLeft)
+        );
+        let get_global_coordinate =
+            NetworkNode::<TestProtocol, TestSerial>::get_global_coordinate_and_global_location_from_local_location(
+                locallocation_cmp,
+                coordinate_cmp,
+                locallocation,
+                coordinate,
+            );
+        assert_eq!(
+            get_global_coordinate,
+            ((1, -1), LocalNetworkLocation::UpRight)
+        );
     }
 }

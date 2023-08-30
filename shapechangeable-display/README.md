@@ -99,16 +99,17 @@ this packet is reply for request confirmed coordinate packet.
 
 ##### Implementation
 When the system receive this packet, system will check the global source address of packet. 
-If it is sent from a node which is in the same local network and is not confirmed, the packet has information of nodes which is next to the node not in local network. Otherwise, the packet is only sent by confirmed node.
+If it is sent from a node which is in the same local network, the packet has information of nodes which is next to the node not in local network. Otherwise, the packet is only sent by confirmed node, and has information of only its coordinate.
 
 Data form is like this:
 
 is confirmed(8) | id(16) | x(16) | y(16) | id(16) | ...
 :--:|:--:|:--:|:--:|:--:|:--:
 
-Node that received this packet is in the same node as local 
 This packet is sent by broadcast.
 Header is `ConfirmCoordinate`
+
+These confirmed coordinate information are stored in `neighbor_confirmed`
 
 ### Joining global network
 Todo: These packets are used for making global network by system.
