@@ -1,3 +1,4 @@
+use anyhow::Result;
 use network_node::protocol::Protocol;
 use network_node::utils::type_alias::Id;
 
@@ -27,5 +28,11 @@ impl Protocol for DefaultProtocol {
     }
     fn get_next_node(&self, this_id: Id, destination_id: Id) -> Id {
         0
+    }
+    fn add_connection(&mut self, id: Id, id2: Id) -> Result<()> {
+        Ok(())
+    }
+    fn remove_connection(&mut self, id: Id, id2: Id) -> Result<()> {
+        Ok(())
     }
 }

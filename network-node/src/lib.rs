@@ -54,6 +54,7 @@ where
     pub fn new(mut serial: S, protocol: T, system_info: &impl SystemInfo) -> Result<Self> {
         let localnet = LocalNetwork::new(system_info);
         let neighbor_in_localnet: Vec<Id> = localnet.get_neighbor_ids().into();
+        let mut delay_cnt = 0;
 
         if localnet.is_root() {
             info!("root node");
