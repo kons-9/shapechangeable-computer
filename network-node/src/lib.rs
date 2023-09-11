@@ -34,8 +34,8 @@ where
     T: Protocol,
     S: SerialTrait,
 {
-    /// now, mac address of localnet is used as node_id (in short, ip address = mac address)
     ip_address: Id,
+    mac_address: Id,
     localnet: LocalNetwork,
     global_location: LocalNetworkLocation,
     coordinate: Coordinate,
@@ -51,7 +51,7 @@ where
     T: Protocol,
     S: SerialTrait,
 {
-    pub fn new(mut serial: S, protocol: T, system_info: &impl SystemInfo) -> Result<Self> {
+    pub fn new(mut serial: S, mut protocol: T, system_info: &impl SystemInfo) -> Result<Self> {
         let localnet = LocalNetwork::new(system_info);
         let neighbor_in_localnet: Vec<Id> = localnet.get_neighbor_ids().into();
         let mut delay_cnt = 0;
@@ -73,6 +73,7 @@ where
             info!("global_location: {:?}", global_location);
             return Ok(NetworkNode {
                 ip_address: localnet.get_mac_address(),
+                mac_address: localnet.get_mac_address(),
                 coordinate: localnet.root_coordinate(),
                 localnet,
                 global_location,
@@ -87,34 +88,18 @@ where
         // //////////////////////////////////////////
 
         info!("not root node");
-        let ip_address = localnet.get_mac_address();
+        let mac_address = localnet.get_mac_address();
 
-        // not root, so need to connect other nodes(units).
+        // not root, so need to connect other nodes(units) to make localnet.
 
-        // (node that send the coordinate, node that has the coordinate, coordinate)
-        // if the information is send by confirmed node in non-localnet, first and second node is same.
+        // (node that send the coordinate(neighbor), node that has the coordinate, coordinate)
+        // if the information is send by confirmed node in non-localnet, first and second node Id is same.
         let mut neighbor_confirmed: Vec<(Id, Id, Coordinate)> = Vec::new();
 
         'outer: loop {
-            // loop {
-            //     match Self::check_connection(&mut serial, ip_address) {
-            //         Ok(true) => break,
-            //         Ok(false) => {
-            //             info!("connection is not exist");
-            //         }
-            //         Err(e) => {
-            //             println!("error: {:?}", e);
-            //             serial.flush_all()?;
-            //         }
-            //     }
-            //     std::thread::sleep(Duration::from_millis(3000));
-            //     continue;
-            // }
-            // info!("confirmed connection with other nodes");
-
-            while !Self::is_ready(&neighbor_confirmed, ip_address)? {
+            while !Self::is_ready(&neighbor_confirmed, mac_address)? {
                 // send broadcast packet
-                match Self::request_confirmed_coordinate(&mut serial, ip_address) {
+                match Self::request_confirmed_coordinate(&mut serial, mac_address) {
                     Ok(_) => {}
                     Err(e) => {
                         println!("error: {:?}", e);
@@ -132,7 +117,7 @@ where
                         // time out
                         continue 'outer;
                     }
-                    let received_packet = match Packet::receive(&mut serial, ip_address) {
+                    let received_packet = match Packet::receive(&mut serial, mac_address) {
                         Ok(Some(packet)) => packet,
                         Ok(None) => {
                             sleep(Duration::from_millis(10));
@@ -149,7 +134,7 @@ where
                     info!("received packet: {:?}", received_packet);
                     let is_valid = Self::process_received_packet_of_request(
                         &mut serial,
-                        ip_address,
+                        mac_address,
                         received_packet,
                         &mut neighbor_confirmed,
                     )?;
@@ -169,12 +154,14 @@ where
         let (coordinate, global_location) =
             Self::coordinate_and_global_location_from_neighbor_confirmed(
                 &neighbor_confirmed,
-                ip_address,
+                mac_address,
             )?;
 
-        // todo: Join global network
+        // Join global network
+        let ip_address = protocol.join_global_network(mac_address, coordinate)?;
 
         Ok(NetworkNode {
+            mac_address,
             ip_address,
             localnet,
             global_location,

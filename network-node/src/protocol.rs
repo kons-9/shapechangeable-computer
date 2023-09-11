@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::utils::type_alias::Id;
+use crate::utils::type_alias::{Coordinate, Id};
 
-type ChannelId = u8;
+pub type ChannelId = u8;
 
 pub trait Protocol {
     /// check whether this node is in route
@@ -27,6 +27,8 @@ pub trait Protocol {
         // default implementation has only one channel, so cannot change it.
         Ok(())
     }
+    // return is global network ip_address
+    fn join_global_network(&mut self, mac_address: Id, coordinate: Coordinate) -> Result<Id>;
 }
 
 #[cfg(test)]
