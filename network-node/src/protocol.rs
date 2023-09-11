@@ -66,5 +66,14 @@ pub mod test {
         fn remove_connection(&mut self, id: Id, id2: Id) -> Result<()> {
             Ok(())
         }
+        fn get_channel(&self, this: Id, destinateion: Id) -> ChannelId {
+            0
+        }
+        fn change_channel(&mut self, this: Id, destination: Id, channel: ChannelId) -> Result<()> {
+            Ok(())
+        }
+        fn join_global_network(&mut self, mac_address: Id, coordinate: Coordinate) -> Result<Id> {
+            Ok(0)
+        }
     }
 }
