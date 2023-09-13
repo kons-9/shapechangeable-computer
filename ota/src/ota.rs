@@ -13,7 +13,6 @@ pub struct Ota {}
 
 impl Ota {
     pub fn new() -> Self {
-        // Ota { data: [0; 1024] }
         Ota {}
     }
     // execute the OTA
@@ -51,7 +50,7 @@ impl Ota {
         let mut client = HttpClient::wrap(EspHttpConnection::new(&Default::default())?);
 
         info!("try to create request...");
-        let header = [("accept", "text/plain"), ("connection", "close")];
+        let header = [("accept", "binary/octet-stream"), ("connection", "close")];
 
         info!("request url: {}", url);
         let mut request = client.request(Method::Get, url, &header)?;
@@ -63,17 +62,27 @@ impl Ota {
         let status = response.status();
         info!("status: {}", status);
 
-        let (_, mut body): (_, &mut EspHttpConnection) = response.split();
-        let mut buf = [0; 4096];
+        // let (_, mut body): (_, &mut EspHttpConnection) = response.split();
+        info!("==================================================");
+
         let mut ota = esp_ota::OtaUpdate::begin()?;
 
         info!("start to download firmware...");
+        let mut cnt = 0;
         loop {
-            let bytes_read = io::try_read_full(&mut body, &mut buf).map_err(|e| e.0)?;
-            if bytes_read == 0 {
+            let mut buf = [0; 1024];
+            let byte_read = response.read(&mut buf).map_err(|e| e.0)?;
+            if byte_read == 0 {
                 break;
             }
-            ota.write(&buf[0..bytes_read])?;
+            cnt += byte_read;
+            println!("read {:x} bytes", cnt);
+            println!("read {} bytes", byte_read);
+            for i in 0..byte_read {
+                print!("{:02x} ", buf[i]);
+            }
+            println!();
+            ota.write(&buf)?;
         }
         info!("download firmware success!");
 
