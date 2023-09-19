@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     unsafe {
         let esp_partition = esp_ota_get_boot_partition();
         let running = esp_ota_get_running_partition();
-        let update_partition = esp_ota_get_next_update_partition(std::ptr::null());
+        let update_partition = esp_ota_get_next_update_partition(core::ptr::null());
         let mut update_handle = 0;
 
         esp_ota_begin(
