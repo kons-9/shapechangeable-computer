@@ -1,19 +1,24 @@
 use anyhow::Result;
+use esp_idf_hal::peripherals;
 use log::info;
 use ota::ota::Ota;
+
+use embedded_svc::wifi::{AuthMethod, ClientConfiguration, Configuration};
+
+use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 
 // download the firmware from the server by http
 
 #[derive(Debug)]
 #[toml_cfg::toml_config]
 pub struct Config {
-    #[default("")]
+    #[default = ""]
     url: &'static str,
-    #[default("")]
+    #[default = ""]
     filename: &'static str,
-    #[default("")]
+    #[default = ""]
     wifi_ssid: &'static str,
-    #[default("")]
+    #[default = ""]
     wifi_password: &'static str,
 }
 
@@ -23,13 +28,21 @@ fn main() -> Result<()> {
 
     let config = CONFIG;
 
+    let peripherals = peripherals::Peripherals::take().unwrap();
+    let nvs = esp_idf_svc::nvs::EspDefaultNvsPartition::take()?;
+    let sys_loop = esp_idf_svc::eventloop::EspSystemEventLoop::take()?;
+
     info!("try to connect to wifi...");
     info!("wifi_ssid: {}", config.wifi_ssid);
     info!("wifi_password: {}", config.wifi_password);
     // connect to wifi
     // check ssid and password is valid, then connect to wifi
+    let mut wifi = BlockingWifi::wrap(
+        EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
+        sys_loop,
+    )?;
     let ota = Ota::new();
-    ota.connect_to_wifi(config.wifi_ssid, config.wifi_password)?;
+    ota.connect_to_wifi(&mut wifi, &config.wifi_ssid, &config.wifi_password)?;
 
     info!("connect to wifi success!");
 
@@ -38,23 +51,15 @@ fn main() -> Result<()> {
     info!("filename: {}", config.filename);
     // download firmware
     // check url is valid, then download firmware to flash(ota partition)
-    if ota.check_firmware_is_latest(config.url, config.filename)? {
+    if ota.check_firmware_is_latest(&config.url, &config.filename)? {
         info!("Firmware is latest!, no need to update!");
-        return Ok(());
+    } else {
+        info!("Firmware is not latest!, need to update!");
     }
-    ota.download_firmware(config.url, config.filename)?;
+    ota.download_firmware(&config.url, &config.filename)?;
 
     info!("download firmware success!");
-    info!("try to update firmware...");
-    // update firmware
-    ota.update_firmware()?;
-
-    info!("update firmware success!");
-    info!("reboot device...");
-    ota.reboot_device()?;
-
     loop {
-        // wait for reboot
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }

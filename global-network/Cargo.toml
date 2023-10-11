@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 network-node = { path = "../network-node" }
+anyhow = "1.0.75"

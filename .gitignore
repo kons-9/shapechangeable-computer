@@ -4,5 +4,6 @@
 target
 Cargo.lock
 cfg.toml
+tmp
 
 shapechangeable-display/src/bin/write_efuse_localnet_*.rs
