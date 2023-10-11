@@ -123,7 +123,7 @@ where
                 }
 
                 // delay
-                sleep(Duration::from_millis(3000));
+                sleep(Duration::from_millis(200));
 
                 let mut loop_count = 0;
                 loop {
@@ -134,7 +134,7 @@ where
                     let received_packet = match Packet::receive(&mut serial, ip_address) {
                         Ok(Some(packet)) => packet,
                         Ok(None) => {
-                            sleep(Duration::from_millis(10));
+                            sleep(Duration::from_millis(100));
                             loop_count += 1;
                             continue;
                         }

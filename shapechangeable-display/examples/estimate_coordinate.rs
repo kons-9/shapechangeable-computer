@@ -101,13 +101,14 @@ fn main() -> Result<()> {
                     display.print("no packet", true);
                     flag = false;
                 }
-                esp_idf_hal::delay::Delay::delay_ms(10);
+                esp_idf_hal::delay::Delay::delay_ms(50);
                 continue;
             }
             messages.unwrap()
         };
 
         let from = packet.get_global_from();
+        esp_idf_hal::delay::Delay::delay_ms(rand::random::<u32>() % 1000);
 
         match packet.get_header() {
             Header::HCheckConnection => {
