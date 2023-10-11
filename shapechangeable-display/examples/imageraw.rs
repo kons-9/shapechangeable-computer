@@ -1,10 +1,4 @@
 use anyhow::Result;
-use embedded_graphics::image::Image;
-use embedded_graphics::image::ImageRaw;
-use embedded_graphics::image::ImageRawLE;
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::*;
-
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::Gpio0;
 use esp_idf_hal::gpio::PinDriver;
@@ -12,8 +6,26 @@ use esp_idf_hal::prelude::Peripherals;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::spi;
 
+use embedded_graphics::image::ImageRawLE;
+use embedded_graphics::pixelcolor::Rgb565;
+
+use tinybmp::Bmp;
+
+use embedded_graphics::{
+    image::{Image, ImageRaw},
+    prelude::*,
+};
 use st7735_lcd;
 use st7735_lcd::Orientation;
+
+#[rustfmt::skip]
+const DATA: &[u8] = &[
+    0b11101111, 0b0101_0000,
+    0b10001000, 0b0101_0000,
+    0b11101011, 0b0101_0000,
+    0b10001001, 0b0101_0000,
+    0b11101111, 0b0101_0000,
+];
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
@@ -53,16 +65,22 @@ fn main() -> Result<()> {
     display.set_offset(0, 25);
 
     esp_idf_hal::delay::Delay::delay_ms(1000);
+    // The image dimensions and the format of the stored raw data must be specified
+    // when the `new` function is called. The data format can, for example, be specified
+    // by using the turbofish syntax. For the image dimensions only the width must be
+    // passed to the `new` function. The image height will be calculated based on the
+    // length of the image data and the data format.
+    let bmp_data = include_bytes!("../asset/hello.bmp");
 
-    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.bmp"), 240);
-    let image = Image::new(&image_raw, Point::new(26, 8));
-    image.draw(&mut display).unwrap();
+    // Parse the BMP file.
+    let bmp = Bmp::<Rgb565>::from_slice(bmp_data).unwrap();
 
-    println!("lcd test have done.");
+    let image = Image::new(&bmp, Point::zero());
+
+    image.draw(&mut display);
+
+    println!("Done");
     loop {
         esp_idf_hal::delay::Delay::delay_ms(1000);
-        display.clear(Rgb565::BLACK).unwrap();
-        esp_idf_hal::delay::Delay::delay_ms(1000);
-        image.draw(&mut display).unwrap();
     }
 }
