@@ -97,6 +97,9 @@ The process is this:
 **2. if this node has already confirmed**
 1. If the node receives request confirmed coordinate packet(2.2), then sends request confirmed coordinate packet.
 
+障害耐性のためにパケット送信間隔を、すでに確定しているー＞10~100ms, 未確定ー＞200~300ms、送信したノードは500ms待つことにする。
+todo: ちゃんと考えてもいい気がするが衝突検知がほしいよねなどと
+
 #### 2.1 Request confirmed coordinate
 #### Explanation
 Due to getting global coordinate, you should access other unit's coordinate.
