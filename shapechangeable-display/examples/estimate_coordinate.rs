@@ -97,8 +97,8 @@ fn main() -> Result<()> {
                             "_",
                             YCORD,
                             ".raw"
-                        )), 126);
-                    let image = Image::new(&image_raw, Point::new(2, 2));
+                        )), 128);
+                    let image = Image::new(&image_raw, Point::new(0, 0));
                     image.draw(&mut display).unwrap();
                 }, )*)*
 
