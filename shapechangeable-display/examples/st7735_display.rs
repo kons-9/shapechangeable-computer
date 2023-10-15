@@ -54,7 +54,7 @@ fn main() -> Result<()> {
 
     esp_idf_hal::delay::Delay::delay_ms(1000);
 
-    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.bmp"), 240);
+    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.raw"), 86);
     let image = Image::new(&image_raw, Point::new(26, 8));
     image.draw(&mut display).unwrap();
 
