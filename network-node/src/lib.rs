@@ -131,6 +131,7 @@ where
 
         const DELAY_INIT_MAX: u64 = 100;
         const DELAY_MAX: u64 = 10000;
+
         let mut delay = rng.gen_range(1..DELAY_INIT_MAX);
 
         let mut wait = |reset| {
@@ -149,7 +150,10 @@ where
             while !Self::is_ready(&neighbor_confirmed, mac_address) {
                 // send broadcast packet
                 match Self::request_confirmed_coordinate(serial, mac_address) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        info!("send request confirmed coordinate packet");
+                        wait(true);
+                    }
                     Err(e) => {
                         // coliision
                         println!("error: {:?}", e);
@@ -160,19 +164,21 @@ where
                 }
 
                 // delay
-                sleep(Duration::from_millis(200));
+                sleep(Duration::from_millis(10));
+
                 let mut loop_count = 0;
                 loop {
                     if loop_count > 100 {
                         // time out
-                        wait(false);
+                        info!("time out");
                         continue 'outer;
                     }
                     let received_packet = match Packet::receive(serial, mac_address) {
                         Ok(Some(packet)) => packet,
                         Ok(None) => {
-                            wait(false);
                             loop_count += 1;
+                            wait(false);
+                            wait(true);
                             continue;
                         }
                         Err(e) => {
@@ -183,33 +189,33 @@ where
                             continue;
                         }
                     };
-                    wait(true);
+                    // wait(true);
                     info!("received packet: {:?}", received_packet);
-                    let is_valid = match Self::process_reply_for_request_confirmed_coordinate(
+                    match Self::process_reply_for_request_confirmed_coordinate(
                         serial,
                         mac_address,
                         received_packet,
                         &mut neighbor_confirmed,
                     ) {
-                        Ok(is_valid) => is_valid,
+                        Ok(true) => {
+                            // valid packet
+                            info!("neighbor_confirmed: {:?}", neighbor_confirmed);
+                            break;
+                        }
+                        Ok(false) => {
+                            info!("not valid packet");
+                            loop_count += 1;
+                            // wait(false);
+                            continue;
+                        }
                         Err(e) => {
                             println!("error: {:?}", e);
                             serial.flush_all()?;
-                            wait(false);
+                            // wait(false);
                             loop_count += 1;
                             continue;
                         }
-                    };
-
-                    if !is_valid {
-                        info!("not valid packet");
-                        loop_count += 1;
-                        wait(false);
-                        continue;
                     }
-                    info!("neighbor_confirmed: {:?}", neighbor_confirmed);
-                    wait(true);
-                    break;
                 }
             }
             return Ok(neighbor_confirmed);
