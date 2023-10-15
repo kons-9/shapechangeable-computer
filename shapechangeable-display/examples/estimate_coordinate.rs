@@ -12,6 +12,13 @@ use std_display::display::Display;
 use std_display::efuse::Efuse;
 use std_display::serial;
 
+use embedded_graphics::image::Image;
+use embedded_graphics::image::ImageRaw;
+use embedded_graphics::image::ImageRawLE;
+use embedded_graphics::pixelcolor::Rgb565;
+use embedded_graphics::prelude::*;
+use seq_macro::seq;
+
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
@@ -79,6 +86,33 @@ fn main() -> Result<()> {
     info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
     info!("estimation is done");
 
+    seq!( XCORD in 0..4 {
+        seq!( YCORD in 0..4 {
+            match network.get_coordinate() {
+                #(#( (XCORD, YCORD) => {
+                    let image_raw: ImageRawLE<Rgb565> =
+                        ImageRaw::new(include_bytes!(concat!(
+                            "../../../../python/raw_translater/out/test_",
+                            XCORD,
+                            "_",
+                            YCORD,
+                            ".raw"
+                        )), 126);
+                    let image = Image::new(&image_raw, Point::new(2, 2));
+                    image.draw(&mut display).unwrap();
+                }, )*)*
+
+                _ => {
+                    display.print("Error: invalid coordinate", true);
+                    display.print(&coordinate_str, true);
+                    info!("Error: invalid coordinate");
+                }
+            }
+        });
+    });
+
+    info!("complete initialization");
+
     // after network connected
     let mut flag = true;
     loop {
@@ -87,18 +121,13 @@ fn main() -> Result<()> {
             let messages = network.get_packet();
             if messages.is_err() {
                 if let Err(e) = network.flush_all() {
-                    display.print(&format!("flush_read error: {:?}", e), true);
                     panic!("flush_read error: {:?}", e);
                 }
-                display.print("recovering...", true);
-                // display.print("flush_read error", true);
-                // esp_idf_hal::delay::Delay::delay_ms(10);
                 continue;
             }
             let messages = messages.unwrap();
             if messages.is_none() {
                 if flag {
-                    display.print("no packet", true);
                     flag = false;
                 }
                 esp_idf_hal::delay::Delay::delay_ms(50);
@@ -111,17 +140,6 @@ fn main() -> Result<()> {
         esp_idf_hal::delay::Delay::delay_ms(rand::random::<u32>() % 1000);
 
         match packet.get_header() {
-            Header::HCheckConnection => {
-                if util::is_same_localnet(from, network.get_ip_address()) {
-                    continue;
-                }
-                flag = true;
-                display.print(format!("hdr: {:?}", packet.get_header()).as_str(), true);
-                display.print(format!("src: {:?}", from).as_str(), true);
-                network.send(Packet::make_check_connection_packet(
-                    network.get_ip_address(),
-                ))?;
-            }
             Header::HRequestConfirmedCoordinate => {
                 let packet = Packet::make_confirm_coordinate_packet_by_confirmed_node(
                     network.get_ip_address(),
