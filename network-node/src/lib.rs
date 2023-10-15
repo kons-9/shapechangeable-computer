@@ -146,25 +146,28 @@ where
             }
         };
 
+        let mut error_wait = |e: Error, serial: &mut S| {
+            info!("error: {:?}", e);
+            serial.flush_all().unwrap();
+            sleep(Duration::from_millis(rand::random::<u64>() % 200 + 300));
+        };
+
         'outer: loop {
             while !Self::is_ready(&neighbor_confirmed, mac_address) {
                 // send broadcast packet
                 match Self::request_confirmed_coordinate(serial, mac_address) {
                     Ok(_) => {
                         info!("send request confirmed coordinate packet");
-                        wait(true);
                     }
                     Err(e) => {
                         // coliision
-                        println!("error: {:?}", e);
-                        serial.flush_all()?;
-                        wait(false);
+                        error_wait(e, serial);
                         continue;
                     }
                 }
 
                 // delay
-                sleep(Duration::from_millis(10));
+                sleep(Duration::from_millis(500));
 
                 let mut loop_count = 0;
                 loop {
@@ -177,20 +180,16 @@ where
                         Ok(Some(packet)) => packet,
                         Ok(None) => {
                             loop_count += 1;
-                            wait(false);
-                            wait(true);
                             continue;
                         }
                         Err(e) => {
-                            println!("error: {:?}", e);
-                            serial.flush_all()?;
-                            wait(false);
+                            error_wait(e, serial);
                             loop_count += 1;
                             continue;
                         }
                     };
                     // wait(true);
-                    info!("received packet: {:?}", received_packet);
+                    println!("received packet: {:?}", received_packet);
                     match Self::process_reply_for_request_confirmed_coordinate(
                         serial,
                         mac_address,
@@ -205,13 +204,10 @@ where
                         Ok(false) => {
                             info!("not valid packet");
                             loop_count += 1;
-                            // wait(false);
                             continue;
                         }
                         Err(e) => {
-                            println!("error: {:?}", e);
-                            serial.flush_all()?;
-                            // wait(false);
+                            error_wait(e, serial);
                             loop_count += 1;
                             continue;
                         }
@@ -265,6 +261,9 @@ where
                             return Err(anyhow!("failed to make confirm coordinate packet"));
                         }
                     };
+                    println!("send packet: {:?}", packet);
+
+                    sleep(Duration::from_millis(rand::random::<u64>() % 100 + 200));
 
                     packet.send(serial)?;
                 }
@@ -575,6 +574,9 @@ where
     }
     pub fn get_global_location(&self) -> LocalNetworkLocation {
         self.global_location
+    }
+    pub fn get_mac_address(&self) -> Id {
+        self.mac_address
     }
     pub fn get_ip_address(&self) -> Id {
         self.ip_address

@@ -125,7 +125,7 @@ where
         // calculate global location
 
         // todo:
-        Rotation::Zero
+        Rotation::OneEighty
     }
     pub fn print(&mut self, text: &str, new_line: bool) {
         let x_size = self.style.font.character_size.width as i32;

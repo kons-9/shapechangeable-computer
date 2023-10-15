@@ -1,3 +1,5 @@
+use std::thread;
+
 use anyhow::Result;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
@@ -86,35 +88,42 @@ fn main() -> Result<()> {
     info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
     info!("estimation is done");
 
-    seq!( XCORD in 0..4 {
-        seq!( YCORD in 0..4 {
-            match network.get_coordinate() {
-                #(#( (XCORD, YCORD) => {
-                    let image_raw: ImageRawLE<Rgb565> =
-                        ImageRaw::new(include_bytes!(concat!(
-                            "../../../../python/raw_translater/out/test_",
-                            XCORD,
-                            "_",
-                            YCORD,
-                            ".raw"
-                        )), 128);
-                    let image = Image::new(&image_raw, Point::new(0, 0));
-                    image.draw(&mut display).unwrap();
-                }, )*)*
+    let coordinate = network.get_coordinate();
 
-                _ => {
-                    display.print("Error: invalid coordinate", true);
-                    display.print(&coordinate_str, true);
-                    info!("Error: invalid coordinate");
+    let th0 = thread::spawn(move || {
+        seq!( XCORD in 0..4 {
+            seq!( YCORD in 0..4 {
+                match coordinate {
+                    #(#( (XCORD, YCORD) => {
+                        let image_raw: ImageRawLE<Rgb565> =
+                            ImageRaw::new(include_bytes!(concat!(
+                                "../../../../python/raw_translater/out/test_",
+                                XCORD,
+                                "_",
+                                YCORD,
+                                ".raw"
+                            )), 128);
+                        let image = Image::new(&image_raw, Point::new(0, 0));
+                        image.draw(&mut display).unwrap();
+                    }, )*)*
+
+                    _ => {
+                        display.print("Error: invalid coordinate", true);
+                        display.print(&coordinate_str, true);
+                        info!("Error: invalid coordinate");
+                    }
                 }
-            }
+            });
         });
+
+        info!("complete initialization");
     });
 
-    info!("complete initialization");
+    info!("waiting for network connection...");
 
     // after network connected
     let mut flag = true;
+    network.flush_all()?;
     loop {
         // receive data
         let packet = {
@@ -130,25 +139,26 @@ fn main() -> Result<()> {
                 if flag {
                     flag = false;
                 }
-                esp_idf_hal::delay::Delay::delay_ms(50);
+                esp_idf_hal::delay::Delay::delay_ms(500);
                 continue;
             }
             messages.unwrap()
         };
 
         let from = packet.get_global_from();
-        esp_idf_hal::delay::Delay::delay_ms(rand::random::<u32>() % 1000);
+        esp_idf_hal::delay::Delay::delay_ms(rand::random::<u32>() % 90 + 10);
 
         match packet.get_header() {
             Header::HRequestConfirmedCoordinate => {
                 let packet = Packet::make_confirm_coordinate_packet_by_confirmed_node(
-                    network.get_ip_address(),
+                    network.get_mac_address(),
                     from,
                     network.get_coordinate(),
                     network.get_global_location(),
                 )
                 .unwrap();
 
+                println!("send packet: {:?}", packet);
                 network.send(packet)?;
             }
             _ => {
@@ -156,4 +166,5 @@ fn main() -> Result<()> {
             }
         }
     }
+    th0.join().unwrap();
 }
