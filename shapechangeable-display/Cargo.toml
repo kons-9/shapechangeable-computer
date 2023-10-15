@@ -48,6 +48,8 @@ applications = {path = "../applications" }
 network-node = {path = "../network-node" }
 global-network = {path = "../global-network" }
 tinybmp = "0.5.0"
+seq-macro = "0.3"
+lazy_static = "1.4.0"
 
 [build-dependencies]
 embuild = "0.31.2"
