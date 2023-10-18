@@ -36,7 +36,7 @@ where
     y: i32,
 }
 
-enum Rotation {
+pub enum Rotation {
     Zero,
     Ninety,
     OneEighty,
@@ -111,6 +111,10 @@ where
         coordinate: Coordinate,
     ) {
         let rotation = Self::calucurate_rotation(local_location, global_location, coordinate);
+        self.set_rotation(rotation);
+    }
+
+    pub fn set_rotation(&mut self, rotation: Rotation) {
         self.direction = rotation;
         self.display
             .set_orientation(&self.direction.rotation_to_orientation())
@@ -127,6 +131,18 @@ where
         // todo:
         Rotation::OneEighty
     }
+    pub fn print_with_style(
+        &mut self,
+        text: &str,
+        new_line: bool,
+        style: MonoTextStyle<'d, Rgb565>,
+    ) {
+        let prev_style = self.style;
+        self.style = style;
+        self.print(text, new_line);
+        self.style = prev_style;
+    }
+
     pub fn print(&mut self, text: &str, new_line: bool) {
         let x_size = self.style.font.character_size.width as i32;
         let y_size = self.style.font.character_size.height as i32;
@@ -170,8 +186,19 @@ where
     pub fn set_offset(&mut self, x: u16, y: u16) {
         self.display.set_offset(x, y);
     }
+
     pub fn clear(&mut self, color: Rgb565) {
-        self.display.clear(color).unwrap()
+        self.display.clear(color).unwrap();
+        self.set_cursor(0, 10);
+    }
+
+    pub fn reset(&mut self) {
+        self.clear(Rgb565::BLACK);
+    }
+
+    pub fn set_cursor(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
     }
 }
 

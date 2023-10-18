@@ -1,6 +1,8 @@
 use std::thread;
 
 use anyhow::Result;
+use embedded_graphics::mono_font::ascii::FONT_10X20;
+use embedded_graphics::mono_font::MonoTextStyle;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
 use esp_idf_hal::prelude::*;
 
@@ -10,7 +12,7 @@ use network_node::header::Header;
 use network_node::packet::Packet;
 use network_node::utils::util::{self, get_first_messages};
 use network_node::NetworkNode;
-use std_display::display::Display;
+use std_display::display::{Display, Rotation};
 use std_display::efuse::Efuse;
 use std_display::serial;
 
@@ -40,10 +42,23 @@ fn main() -> Result<()> {
     let efuse = Efuse::new();
     let value = efuse.get_efuse_value();
 
+    display.set_rotation(Rotation::OneEighty);
+    display.set_cursor(0, 20);
+
+    let mac_address = util::get_mac_address(value);
+    display.print_with_style(
+        "Mac Address:",
+        true,
+        MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE),
+    );
+    let mac_address_str = format!(" {} = {:05b}", mac_address, mac_address);
+    display.print_with_style(
+        &mac_address_str,
+        true,
+        MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE),
+    );
+
     let first_messages = get_first_messages(value);
-    for message in first_messages {
-        display.print(&message, true);
-    }
 
     // serial initialization
     let uart = peripheral.uart1;
@@ -51,8 +66,6 @@ fn main() -> Result<()> {
     let rx = peripheral.pins.gpio20;
     let enable: AnyOutputPin = peripheral.pins.gpio5.into();
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
-
-    display.print("begining network initialization...", true);
 
     // network initialization
     let protocol: DefaultProtocol = DefaultProtocol::new();
@@ -67,22 +80,11 @@ fn main() -> Result<()> {
     };
 
     network.print_coordinate();
-    display.set_rotation_by_coordinate(
-        network.get_local_location(),
-        network.get_global_location(),
-        network.get_coordinate(),
-    );
 
     let coordinate = network.get_coordinate();
     let coordinate_str = format!("(x,y): ({}, {})", coordinate.0, coordinate.1);
     let global_location = network.get_global_location();
     let global_location_str = format!("gl: {:?}", global_location);
-
-    display.print("network initialized", true);
-    display.print(&coordinate_str, true);
-    display.print(&global_location_str, true);
-    display.print("estimation is done.", true);
-    display.print("waiting for network connection...", true);
 
     info!("network initialized");
     info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
@@ -90,34 +92,19 @@ fn main() -> Result<()> {
 
     let coordinate = network.get_coordinate();
 
-    let th0 = thread::spawn(move || {
-        seq!( XCORD in 0..4 {
-            seq!( YCORD in 0..4 {
-                match coordinate {
-                    #(#( (XCORD, YCORD) => {
-                        let image_raw: ImageRawLE<Rgb565> =
-                            ImageRaw::new(include_bytes!(concat!(
-                                "./../../../raw_translater/out/test_",
-                                XCORD,
-                                "_",
-                                YCORD,
-                                ".raw"
-                            )), 128);
-                        let image = Image::new(&image_raw, Point::new(0, 0));
-                        image.draw(&mut display).unwrap();
-                    }, )*)*
+    display.print("", true);
+    display.print_with_style(
+        "Coordinate:",
+        true,
+        MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE),
+    );
 
-                    _ => {
-                        display.print("Error: invalid coordinate", true);
-                        display.print(&coordinate_str, true);
-                        info!("Error: invalid coordinate");
-                    }
-                }
-            });
-        });
-
-        info!("complete initialization");
-    });
+    let coordinate_str = format!(" ({}, {})", coordinate.0, coordinate.1);
+    display.print_with_style(
+        &coordinate_str,
+        true,
+        MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE),
+    );
 
     info!("waiting for network connection...");
 
@@ -166,5 +153,4 @@ fn main() -> Result<()> {
             }
         }
     }
-    th0.join().unwrap();
 }

@@ -97,7 +97,7 @@ fn main() -> Result<()> {
                     #(#( (XCORD, YCORD) => {
                         let image_raw: ImageRawLE<Rgb565> =
                             ImageRaw::new(include_bytes!(concat!(
-                                "./../../../raw_translater/out/test_",
+                                "../../../../python/raw_translater/out/test_",
                                 XCORD,
                                 "_",
                                 YCORD,

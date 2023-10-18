@@ -41,9 +41,6 @@ fn main() -> Result<()> {
     let value = efuse.get_efuse_value();
 
     let first_messages = get_first_messages(value);
-    for message in first_messages {
-        display.print(&message, true);
-    }
 
     // serial initialization
     let uart = peripheral.uart1;
@@ -51,8 +48,6 @@ fn main() -> Result<()> {
     let rx = peripheral.pins.gpio20;
     let enable: AnyOutputPin = peripheral.pins.gpio5.into();
     let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
-
-    display.print("begining network initialization...", true);
 
     // network initialization
     let protocol: DefaultProtocol = DefaultProtocol::new();
@@ -78,42 +73,34 @@ fn main() -> Result<()> {
     let global_location = network.get_global_location();
     let global_location_str = format!("gl: {:?}", global_location);
 
-    display.print("network initialized", true);
-    display.print(&coordinate_str, true);
-    display.print(&global_location_str, true);
-    display.print("estimation is done.", true);
-    display.print("waiting for network connection...", true);
-
     info!("network initialized");
     info!("coordinate: ({}, {})", coordinate.0, coordinate.1);
     info!("estimation is done");
 
     let coordinate = network.get_coordinate();
 
-    let th0 = thread::spawn(move || {
-        seq!( XCORD in 0..4 {
-            seq!( YCORD in 0..4 {
-                match coordinate {
-                    #(#( (XCORD, YCORD) => {
-                        let image_raw: ImageRawLE<Rgb565> =
-                            ImageRaw::new(include_bytes!(concat!(
-                                "./../../../raw_translater/out/test_",
-                                XCORD,
-                                "_",
-                                YCORD,
-                                ".raw"
-                            )), 128);
-                        let image = Image::new(&image_raw, Point::new(0, 0));
-                        image.draw(&mut display).unwrap();
-                    }, )*)*
+    seq!( XCORD in 0..4 {
+        seq!( YCORD in 0..4 {
+            match coordinate {
+                #(#( (XCORD, YCORD) => {
+                    let image_raw: ImageRawLE<Rgb565> =
+                        ImageRaw::new(include_bytes!(concat!(
+                            "../../../raw_translater/out/test_acm_",
+                            XCORD,
+                            "_",
+                            YCORD,
+                            ".raw"
+                        )), 128);
+                    let image = Image::new(&image_raw, Point::new(0, 0));
+                    image.draw(&mut display).unwrap();
+                }, )*)*
 
-                    _ => {
-                        display.print("Error: invalid coordinate", true);
-                        display.print(&coordinate_str, true);
-                        info!("Error: invalid coordinate");
-                    }
+                _ => {
+                    display.print("Error: invalid coordinate", true);
+                    display.print(&coordinate_str, true);
+                    info!("Error: invalid coordinate");
                 }
-            });
+            }
         });
 
         info!("complete initialization");
@@ -166,5 +153,4 @@ fn main() -> Result<()> {
             }
         }
     }
-    th0.join().unwrap();
 }
