@@ -5,6 +5,7 @@ authors = ["toshiki goto <gotoshi.euphonium@gmail.com>"]
 edition = "2021"
 resolver = "2"
 rust-version = "1.66"
+autoexamples = true
 
 [package.metadata.espflash]
 partition_table = "partitions.csv"

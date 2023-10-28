@@ -55,8 +55,8 @@ fn main() -> Result<()> {
         info!("Firmware is latest!, no need to update!");
     } else {
         info!("Firmware is not latest!, need to update!");
+        ota.download_firmware(&config.url, &config.filename)?;
     }
-    ota.download_firmware(&config.url, &config.filename)?;
 
     info!("download firmware success!");
     loop {
