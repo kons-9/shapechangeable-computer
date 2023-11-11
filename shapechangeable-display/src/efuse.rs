@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use core::ffi::c_void;
 
 use esp_idf_sys::esp_err_t;
 

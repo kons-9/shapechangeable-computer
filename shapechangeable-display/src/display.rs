@@ -23,6 +23,8 @@ use st7735_lcd::ST7735;
 use network_node::localnet::LocalNetworkLocation;
 use network_node::utils::type_alias::Coordinate;
 
+use core::fmt::Write;
+
 pub struct Display<'d, DC, RST>
 where
     // SPI: spi::Write<u8>,
@@ -215,16 +217,25 @@ where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         if let Err(x) = self.display.draw_iter(pixels) {
-            println!("draw_iter error: {:?}", x);
-            return Err(anyhow::Error::msg("draw_iter error"));
+            return Err(anyhow::Error::msg("Display::draw_iter error"));
         }
         Ok(())
     }
-    fn clear(&mut self, color: Self::Color) -> std::result::Result<(), Self::Error> {
+    fn clear(&mut self, color: Self::Color) -> core::result::Result<(), Self::Error> {
         if let Err(x) = self.display.clear(color) {
-            println!("clear error: {:?}", x);
-            return Err(anyhow::Error::msg("clear error"));
+            return Err(anyhow::Error::msg("Display::clear error"));
         }
+        Ok(())
+    }
+}
+
+impl<'d, DC, RST> core::fmt::Write for Display<'d, DC, RST>
+where
+    DC: OutputPin,
+    RST: OutputPin,
+{
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.print(s, false);
         Ok(())
     }
 }

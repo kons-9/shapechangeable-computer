@@ -2,7 +2,6 @@ use anyhow::Result;
 
 use embedded_svc::http::client::Client as HttpClient;
 use embedded_svc::http::Method;
-use embedded_svc::utils::io;
 use embedded_svc::wifi::{AuthMethod, ClientConfiguration, Configuration};
 use esp_idf_svc::http::client::EspHttpConnection;
 
@@ -24,17 +23,18 @@ impl Ota {
     ) -> Result<()> {
         let wifi_config = Configuration::Client(ClientConfiguration {
             ssid: wifi_ssid.into(),
-            bssid: None,
-            auth_method: AuthMethod::WPAWPA2Personal,
             password: wifi_password.into(),
+            auth_method: AuthMethod::WPA2Personal,
+            bssid: None,
             channel: None,
         });
 
+        info!("set wifi configuration...");
+
         wifi.set_configuration(&wifi_config)?;
         wifi.start()?;
-
-        info!("try to connect to wifi...");
         wifi.connect()?;
+
         info!("wifi connected!");
 
         wifi.wait_netif_up()?;
@@ -42,7 +42,7 @@ impl Ota {
 
         Ok(())
     }
-    pub fn check_firmware_is_latest(&self, url: &str, filename: &str) -> Result<bool> {
+    pub fn check_firmware_is_latest(&self, _url: &str, _filename: &str) -> Result<bool> {
         Ok(false)
     }
     pub fn download_firmware(&self, url: &str, filename: &str) -> Result<()> {
@@ -53,7 +53,7 @@ impl Ota {
         let header = [("accept", "binary/octet-stream"), ("connection", "close")];
 
         info!("request url: {}", url);
-        let mut request = client.request(Method::Get, url, &header)?;
+        let request = client.request(Method::Get, url, &header)?;
 
         info!("try to submit request...");
         let mut response = request.submit()?;
@@ -68,20 +68,12 @@ impl Ota {
         let mut ota = esp_ota::OtaUpdate::begin()?;
 
         info!("start to download firmware...");
-        let mut cnt = 0;
         loop {
             let mut buf = [0; 1024];
             let byte_read = response.read(&mut buf).map_err(|e| e.0)?;
             if byte_read == 0 {
                 break;
             }
-            cnt += byte_read;
-            println!("read {:x} bytes", cnt);
-            println!("read {} bytes", byte_read);
-            for i in 0..byte_read {
-                print!("{:02x} ", buf[i]);
-            }
-            println!();
             ota.write(&buf)?;
         }
         info!("download firmware success!");

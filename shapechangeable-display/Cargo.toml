@@ -47,9 +47,12 @@ embedded-hal = "0.2.7"
 applications = {path = "../applications" }
 network-node = {path = "../network-node" }
 global-network = {path = "../global-network" }
+ota = {path = "../ota" }
 tinybmp = "0.5.0"
 seq-macro = "0.3"
 lazy_static = "1.4.0"
+esp-println = {version = "0.7.0", features = ["esp32"]}
+esp-alloc = "0.3.0"
 
 [build-dependencies]
 embuild = "0.31.2"
@@ -59,7 +62,8 @@ num_enum = "0.6.1"
 
 # [[bin]]
 # name = "read_efuse"
-# path = "examples/read_efuse.rs"
+# path = "src/main.rs"
+
 #
 # [[bin]]
 # name = "st7735_display"

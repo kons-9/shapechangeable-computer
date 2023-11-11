@@ -32,7 +32,6 @@ fn main() -> Result<()> {
     let nvs = esp_idf_svc::nvs::EspDefaultNvsPartition::take()?;
     let sys_loop = esp_idf_svc::eventloop::EspSystemEventLoop::take()?;
 
-    info!("try to connect to wifi...");
     info!("wifi_ssid: {}", config.wifi_ssid);
     info!("wifi_password: {}", config.wifi_password);
     // connect to wifi
@@ -42,6 +41,8 @@ fn main() -> Result<()> {
         sys_loop,
     )?;
     let ota = Ota::new();
+    info!("try to connect to wifi...");
+
     ota.connect_to_wifi(&mut wifi, &config.wifi_ssid, &config.wifi_password)?;
 
     info!("connect to wifi success!");
