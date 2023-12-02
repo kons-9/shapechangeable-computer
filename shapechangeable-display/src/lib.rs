@@ -1,5 +1,6 @@
 #![no_std]
 pub mod display;
+pub mod display2;
 pub mod efuse;
 pub mod sd;
 pub mod serial;

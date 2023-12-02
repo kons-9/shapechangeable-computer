@@ -1,4 +1,6 @@
 use anyhow::Result;
+use embedded_graphics::image::Image;
+use embedded_graphics::image::ImageRawLE;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
@@ -10,6 +12,12 @@ use embedded_hal::digital::v2::OutputPin;
 
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::Gpio0;
+use esp_idf_hal::gpio::Gpio10;
+use esp_idf_hal::gpio::Gpio3;
+use esp_idf_hal::gpio::Gpio4;
+use esp_idf_hal::gpio::Gpio8;
+use esp_idf_hal::gpio::Output;
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::spi::SpiAnyPins;
 use esp_idf_hal::spi::SpiDeviceDriver;
@@ -25,14 +33,13 @@ use network_node::utils::type_alias::Coordinate;
 
 use core::fmt::Write;
 
-pub struct Display<'d, DC, RST>
-where
-    // SPI: spi::Write<u8>,
-    DC: OutputPin,
-    RST: OutputPin,
-{
+pub struct Display2<'d> {
     direction: Rotation,
-    display: ST7735<SpiDeviceDriver<'d, SpiDriver<'d>>, DC, RST>,
+    display: ST7735<
+        SpiDeviceDriver<'d, SpiDriver<'d>>,
+        PinDriver<'d, Gpio4, Output>,
+        PinDriver<'d, Gpio3, Output>,
+    >,
     style: MonoTextStyle<'d, Rgb565>,
     x: i32,
     y: i32,
@@ -57,22 +64,18 @@ impl Rotation {
     }
 }
 
-impl<'d, DC, RST> Display<'d, DC, RST>
-where
-    DC: OutputPin,
-    RST: OutputPin,
-{
-    pub fn new<SPI>(
-        spi: impl Peripheral<P = SPI> + 'd,
-        sclk: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
-        sdo: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
-        dc: DC,
-        rst: RST,
+impl<'d> Display2<'d> {
+    pub fn new(
+        // spi: impl Peripheral<P = SPI> + 'd,
+        spi: esp_idf_hal::spi::SPI2,
+        // sclk: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
+        sclk: Gpio8,
+        // sdo: impl Peripheral<P = impl esp_idf_hal::gpio::OutputPin> + 'd,
+        sdo: Gpio10,
+        dc: PinDriver<'d, Gpio4, Output>,
+        rst: PinDriver<'d, Gpio3, Output>,
         baudrate: Hertz,
-    ) -> Display<'d, DC, RST>
-    where
-        SPI: SpiAnyPins,
-    {
+    ) -> Display2<'d> {
         // this project use st7735r
         let (rgb, inverted, width, height) = Self::st7735r_setting();
         let driver_config = Default::default();
@@ -92,7 +95,7 @@ where
         display.init(&mut FreeRtos).unwrap();
         display.clear(Rgb565::BLACK).unwrap();
         display.set_offset(6, 0);
-        Display {
+        Display2 {
             direction: Rotation::Zero,
             display,
             style: MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE),
@@ -184,6 +187,9 @@ where
             self.y = y_size;
         }
     }
+    pub fn depict(&mut self, image: &Image<'_, ImageRawLE<Rgb565>>) {
+        image.draw(&mut self.display).expect("failed to draw image");
+    }
 
     pub fn set_offset(&mut self, x: u16, y: u16) {
         self.display.set_offset(x, y);
@@ -204,11 +210,7 @@ where
     }
 }
 
-impl<'d, DC, RST> DrawTarget for Display<'d, DC, RST>
-where
-    DC: OutputPin,
-    RST: OutputPin,
-{
+impl<'d> DrawTarget for Display2<'d> {
     type Color = Rgb565;
     type Error = ();
 
@@ -224,24 +226,22 @@ where
     fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
         self.display.fill_solid(area, color)
     }
+    // fn fill_contiguous<I>(&mut self, area: &Rectangle, color: I) -> Result<(), Self::Error>
+    // where
+    //     I: IntoIterator<Item = Self::Color>,
+    // {
+    //     self.display.fill_contiguous(area, color)
+    // }
 }
 
-impl<'d, DC, RST> core::fmt::Write for Display<'d, DC, RST>
-where
-    DC: OutputPin,
-    RST: OutputPin,
-{
+impl<'d> core::fmt::Write for Display2<'d> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.print(s, false);
         Ok(())
     }
 }
 
-impl<'d, DC, RST> OriginDimensions for Display<'d, DC, RST>
-where
-    DC: OutputPin,
-    RST: OutputPin,
-{
+impl<'d> OriginDimensions for Display2<'d> {
     fn size(&self) -> Size {
         self.display.size()
     }

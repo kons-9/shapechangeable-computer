@@ -1,4 +1,6 @@
-use std::thread;
+// use std::thread;
+use std::thread::sleep;
+// import esp_idf's thread
 
 use anyhow::Result;
 use esp_idf_hal::gpio::{AnyOutputPin, PinDriver};
@@ -11,6 +13,7 @@ use network_node::packet::Packet;
 use network_node::utils::util::{self, get_first_messages};
 use network_node::NetworkNode;
 use std_display::display::Display;
+use std_display::display2::Display2;
 use std_display::efuse::Efuse;
 use std_display::serial;
 
@@ -33,9 +36,11 @@ fn main() -> Result<()> {
     let dc = PinDriver::output(peripheral.pins.gpio4).expect("failed to set dc pin");
     let sdo = peripheral.pins.gpio10;
     let rst = PinDriver::output(peripheral.pins.gpio3).expect("failed to set rst pin");
-    let hertz = 30.MHz().into();
+    // let hertz = 30_000_000;
+    // let hertz = 30_000;
+    let hertz = 30.MHz();
 
-    let mut display = Display::new(spi, sclk, sdo, dc, rst, hertz);
+    let mut display = Display2::new(spi, sclk, sdo, dc, rst, hertz.into());
 
     let efuse = Efuse::new();
     let value = efuse.get_efuse_value();
@@ -50,7 +55,8 @@ fn main() -> Result<()> {
     let tx = peripheral.pins.gpio21;
     let rx = peripheral.pins.gpio20;
     let enable: AnyOutputPin = peripheral.pins.gpio5.into();
-    let serial = serial::Serial::new(uart, tx, rx, enable, 115200);
+    let hertz = 115_200;
+    let serial = serial::Serial::new(uart, tx, rx, enable, hertz);
 
     display.print("begining network initialization...", true);
 
@@ -90,14 +96,23 @@ fn main() -> Result<()> {
 
     let coordinate = network.get_coordinate();
 
-    let th0 = thread::spawn(move || {
+    esp_idf_hal::task::thread::ThreadSpawnConfiguration {
+        stack_size: 4096,
+        priority: 1,
+        ..Default::default()
+    }
+    .set()
+    .unwrap();
+
+    let th0 = std::thread::spawn(move || {
         seq!( XCORD in 0..4 {
             seq!( YCORD in 0..4 {
                 match coordinate {
                     #(#( (XCORD, YCORD) => {
                         let image_raw: ImageRawLE<Rgb565> =
                             ImageRaw::new(include_bytes!(concat!(
-                                "../../../../python/raw_translater/out/test_",
+                                // "../../../../python/raw_translater/out/test_",
+                                "../asset/test_",
                                 XCORD,
                                 "_",
                                 YCORD,
@@ -115,15 +130,18 @@ fn main() -> Result<()> {
                 }
             });
         });
-
-        info!("complete initialization");
+        loop {}
     });
 
     info!("waiting for network connection...");
 
+    while let Err(e) = network.flush_all() {
+        info!("network connection failed");
+        info!("error: {:?}", e);
+        sleep(core::time::Duration::from_secs(1));
+    }
     // after network connected
     let mut flag = true;
-    network.flush_all()?;
     loop {
         // receive data
         let packet = {
@@ -166,5 +184,4 @@ fn main() -> Result<()> {
             }
         }
     }
-    th0.join().unwrap();
 }

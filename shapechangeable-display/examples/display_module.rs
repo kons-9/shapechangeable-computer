@@ -15,6 +15,9 @@ use esp_idf_hal::spi;
 use st7735_lcd;
 use st7735_lcd::Orientation;
 
+use std_display::display::Display;
+use std_display::display2::Display2;
+
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
     // Bind the log crate to the ESP Logging facilities
@@ -27,11 +30,11 @@ fn main() -> Result<()> {
     let sdo = peripherals.pins.gpio10;
     let sdi = Option::<Gpio0>::None;
     let cs = Option::<Gpio0>::None;
-    let driver_config = Default::default();
+    // let driver_config = Default::default();
     let hertz = Hertz(30_000_000);
     let spi_config = spi::SpiConfig::new().baudrate(hertz);
-    let spi =
-        spi::SpiDeviceDriver::new_single(spi, sclk, sdo, sdi, cs, &driver_config, &spi_config)?;
+    // let spi =
+    //     spi::SpiDeviceDriver::new_single(spi, sclk, sdo, sdi, cs, &driver_config, &spi_config)?;
 
     let rst = PinDriver::output(peripherals.pins.gpio3)?;
     let dc = PinDriver::output(peripherals.pins.gpio4)?;
@@ -41,20 +44,21 @@ fn main() -> Result<()> {
     let width = 128;
     let height = 128;
 
-    let mut display = st7735_lcd::ST7735::new(spi, dc, rst, rgb, inverted, width, height);
+    let mut delay = FreeRtos;
 
-    display.init(&mut FreeRtos).unwrap();
-    display.clear(Rgb565::BLACK).unwrap();
-    display
-        .set_orientation(&Orientation::PortraitSwapped)
-        .unwrap();
-    display.set_offset(6, 0);
-    // display.set_cursor(0, 10);
+    let mut display = Display2::new(spi, sclk, sdo, dc, rst, 30_000_000);
 
+    // display.init(&mut delay).unwrap();
+    // display.clear(Rgb565::BLACK).unwrap();
+    // display
+    //     .set_orientation(&Orientation::LandscapeSwapped)
+    //     .unwrap();
+    // display.set_offset(0, 25);
+    //
     esp_idf_hal::delay::Delay::delay_ms(1000);
 
-    // let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.raw"), 86);
-    // let image = Image::new(&image_raw, Point::new(26, 8));
+    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/ferris.raw"), 86);
+    let image = Image::new(&image_raw, Point::new(26, 8));
     let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("../asset/test_2_1.raw"), 128);
     let image = Image::new(&image_raw, Point::new(0, 0));
     image.draw(&mut display).unwrap();
@@ -62,7 +66,7 @@ fn main() -> Result<()> {
     println!("lcd test have done.");
     loop {
         esp_idf_hal::delay::Delay::delay_ms(1000);
-        display.clear(Rgb565::BLACK).unwrap();
+        display.clear(Rgb565::BLACK);
         esp_idf_hal::delay::Delay::delay_ms(1000);
         image.draw(&mut display).unwrap();
     }
