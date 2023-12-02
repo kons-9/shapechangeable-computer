@@ -1,0 +1,5 @@
+[ota]
+url = "https://google.com"
+filename = "index.html"
+wifi_ssid = "ssid"
+wifi_password = "password"

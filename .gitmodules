@@ -1,0 +1,3 @@
+[submodule "shapechangeable-display/gen_asset/raw_translater"]
+	path = shapechangeable-display/gen_asset/raw_translater
+	url = https://github.com/kons-9/raw_translater

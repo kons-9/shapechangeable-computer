@@ -1,0 +1,18 @@
+[package]
+name = "network-node"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+num_enum = "0.7.0"
+anyhow = "1.0.72"
+log = { version = "0.4.19", default-features = false }
+rand = "0.8.5"
+
+[dev-dependencies]
+pretty_assertions = "1"
+applications = {path = "../applications" }
+network-node = {path = "../network-node" }
+global-network = {path = "../global-network" }
