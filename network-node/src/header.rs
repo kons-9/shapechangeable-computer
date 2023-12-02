@@ -2,7 +2,7 @@ use num_enum::TryFromPrimitive;
 
 /// todo) now we use only data and ack header
 /// initial of a header that use only head flit is H
-#[derive(TryFromPrimitive, Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(TryFromPrimitive, Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[repr(u8)]
 pub enum Header {
     // ////////////////////////////////
