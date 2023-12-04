@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     let rst = PinDriver::output(peripheral.pins.gpio3).expect("failed to set rst pin");
     // let hertz = 30_000_000;
     // let hertz = 30_000;
-    let hertz = 30.MHz();
+    let hertz = 50.MHz();
 
     let mut display = Display2::new(spi, sclk, sdo, dc, rst, hertz.into());
 
@@ -112,7 +112,7 @@ fn main() -> Result<()> {
                         let image_raw: ImageRawLE<Rgb565> =
                             ImageRaw::new(include_bytes!(concat!(
                                 // "../../../../python/raw_translater/out/test_",
-                                "../asset/test_",
+                                "../asset/test_acm_",
                                 XCORD,
                                 "_",
                                 YCORD,
